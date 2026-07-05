@@ -1,23 +1,61 @@
-# WebAR QR 굿즈
+# 기도하는 예수님 · 마커 AR (WebAR 굿즈)
 
-QR 코드를 폰 카메라로 스캔하면, 앱 설치 없이 웹에서 **3D 캐릭터가 바로 등장**하고
-원하면 **실제 공간(바닥·책상)에 놓아볼 수 있는** WebAR 페이지입니다.
-구글 `<model-viewer>` 기반, 마커 없음, 정적 HTML 한 장.
+굿즈 카드의 **마커 그림**을 폰 카메라로 비추면, 앱 설치 없이 웹에서
+**3D 예수님 캐릭터가 그림 위에 얹혀서 등장**하는 WebAR 페이지입니다.
+
+MindAR(이미지 트래킹) + three.js 기반, 단일 정적 HTML 한 장.
+
+> **참고**: 초기 설계는 마커리스 `<model-viewer>` 방식이었으나,
+> "그림(마커)에 캐릭터가 얹히는" 경험을 위해 **MindAR 마커 트래킹 방식으로 전환**했습니다.
+> (설계 문서: `docs/superpowers/specs/2026-07-04-webar-goods-design.md`)
 
 ## 파일 구성
 
 ```
 webar-goods/
-├── index.html          # 핵심 페이지 (model-viewer)
+├── index.html            # 핵심 페이지 (MindAR + three.js, iOS 카메라 대응)
 ├── assets/
-│   └── model.glb       # 3D 모델 (교체 가능)
-├── qr.png              # 배포 URL QR 코드 (배포 후 생성)
+│   ├── model-opt.glb     # 3D 모델 (Draco 압축본, 실제 사용 · 1MB)
+│   ├── model.glb         # 3D 모델 원본 (소스 · 18MB, 압축 전)
+│   ├── target.mind       # marker.png를 MindAR로 컴파일한 인식 데이터
+│   └── marker.png        # 인쇄/표시용 마커 그림 (이걸 카메라로 비춤)
+├── qr.png                # 배포 URL QR 코드
+├── docs/                 # 설계 문서
 └── README.md
 ```
 
-## 1. 로컬에서 확인하기
+## 작동 방식
 
-3D 뷰어는 `http://localhost` 에서 잘 동작합니다.
+```
+[QR 스캔] → [index.html 열림(HTTPS)] → [카메라 권한 허용]
+   → [카메라로 marker.png(그림)를 비춤]
+   → [target.mind로 그림 인식] → [그림 위에 3D 예수님 등장 🙏]
+```
+
+- 서버 로직 없음(정적). 브라우저가 파일을 받아 three.js로 렌더링.
+- three.js·MindAR는 jsdelivr CDN에서 로드 (빌드 불필요).
+- **iOS 대응**: MindAR 기본 렌더 대신 카메라 영상을 3D 캔버스 배경 텍스처로 직접 그려
+  아이폰 Safari의 검은 화면 문제를 우회합니다 (`index.html` 렌더 루프 참고).
+
+## 마커 준비
+
+`assets/marker.png` 를 **카드에 인쇄하거나 화면에 띄워** 사용합니다.
+카메라로 이 그림을 비추면 그 위에 캐릭터가 나타납니다.
+
+## URL 파라미터 (캐릭터 위치/크기 조정)
+
+배치가 어긋나면 URL 쿼리로 실시간 조정할 수 있습니다.
+
+| 파라미터 | 의미 | 기본값 |
+|---|---|---|
+| `s` | 크기(scale) | 0.5 |
+| `rx` `ry` `rz` | 회전(도 단위) | 0 |
+| `x` `y` `z` | 위치 | 0 |
+| `debug` | `1`이면 하단 로그 표시 | 꺼짐 |
+
+예: `index.html?s=0.4&rx=90&y=0.1&debug=1`
+
+## 로컬에서 확인하기
 
 ```bash
 cd webar-goods
@@ -25,53 +63,41 @@ python3 -m http.server 8080
 # 브라우저에서 http://localhost:8080 접속
 ```
 
-> 참고: 폰의 **AR(실제 공간 배치)** 및 카메라 기능은 **HTTPS 주소**에서만 동작합니다.
-> 로컬에서는 화면 속 3D 렌더링까지 확인하고, AR은 배포 후 실제 폰에서 테스트하세요.
+> 카메라/AR은 **HTTPS 주소**에서만 동작합니다.
+> 로컬(HTTP)에서는 코드 로드까지만 확인되고, 실제 카메라 테스트는 배포 후 폰에서 하세요.
 
-## 2. 배포하기 (HTTPS 필수)
+## 배포하기 (HTTPS 필수)
 
-정적 파일이라 무료 HTTPS 호스팅 아무거나 가능합니다.
+정적 파일이라 무료 HTTPS 호스팅이면 됩니다. 이 프로젝트는 **Vercel**에 연결되어 있습니다.
 
-**Vercel (가장 간단)**
 ```bash
-npm i -g vercel
 cd webar-goods
-vercel        # 안내 따라가면 https URL 발급
+vercel        # 안내 따라가면 https URL 발급 (root URL이 index.html = 마커 AR)
 ```
 
-**Netlify** — https://app.netlify.com 에서 `webar-goods` 폴더를 드래그&드롭.
+## QR 코드 생성
 
-**GitHub Pages** — 레포에 올리고 Settings → Pages 에서 브랜치 지정.
-
-## 3. QR 코드 생성
-
-배포 URL이 확정되면 그 주소로 QR을 만들어 카드에 인쇄합니다.
+배포 URL(root)이 확정되면 그 주소로 QR을 만들어 카드에 인쇄합니다.
 
 ```bash
 # 예: qrencode 사용 (brew install qrencode)
 qrencode -o qr.png -s 10 "https://내-배포-주소.vercel.app"
 ```
-또는 온라인 QR 생성기에 URL을 넣어 이미지를 받습니다.
 
-## 4. 3D 모델 교체
+## 3D 모델 교체
 
-`assets/model.glb` 를 새 `.glb` 파일로 바꾸면 됩니다.
-파일명이 다르면 `index.html` 의 `src="./assets/model.glb"` 도 함께 수정하세요.
+1. 새 모델을 `assets/model.glb`(원본)로 저장.
+2. Draco 압축본 `assets/model-opt.glb` 생성 (예: `gltf-transform draco model.glb model-opt.glb`).
+   - 모바일 로딩을 위해 **2~3MB 이하** 권장 (텍스처 1024px 이하).
+3. `index.html`은 `./assets/model-opt.glb`를 로드하므로, 파일명을 유지하면 코드 수정 불필요.
 
-- 권장: 모바일 로딩을 위해 **2~3MB 이하**로 최적화 (텍스처 1024px 이하).
-- 큰 파일은 첫 로딩이 느립니다. `gltf-transform` 등으로 Draco/meshopt 압축을 권장.
+## 마커 교체
 
-## 5. 아이폰 AR 품질 높이기 (선택)
-
-아이폰의 실제공간 AR(Quick Look)은 `model-viewer`가 **USDZ를 자동 생성**해 동작합니다.
-별도 파일 없이도 되지만, 더 정확한 품질을 원하면 수제 USDZ를 추가하세요.
-
-1. 무료 Mac 앱 **Reality Converter**(Apple)로 `model.glb` → `model.usdz` 변환.
-2. 변환한 파일을 `assets/model.usdz` 로 저장.
-3. `index.html` 의 `<model-viewer>` 에 `ios-src="./assets/model.usdz"` 속성 추가.
+`assets/marker.png`를 바꾸면 `assets/target.mind`도 다시 컴파일해야 합니다.
+MindAR 이미지 타겟 컴파일러(<https://hiukim.github.io/mind-ar-js-doc/tools/compile>)에
+새 그림을 올려 `.mind` 파일을 받아 교체하세요.
 
 ## 지원 환경
 
-- **화면 속 3D**: 모든 최신 브라우저 (데스크톱/모바일).
-- **실제공간 AR**: 안드로이드 Chrome(Scene Viewer), 아이폰 Safari(Quick Look).
-- AR 미지원 기기에서는 AR 버튼이 자동으로 숨겨지고 화면 속 3D만 제공됩니다.
+- 안드로이드 Chrome / 아이폰 Safari (HTTPS + 카메라 권한 허용).
+- 카메라 권한 거부 시 안내 화면 + 다시 시도 버튼 제공.
