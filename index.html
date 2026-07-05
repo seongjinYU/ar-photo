@@ -3,141 +3,218 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#000" />
-  <title>기도하는 예수님 · 마커 AR</title>
-  <style>
-    html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; color:#fff; }
-    #container { position: fixed; inset: 0; }
-    #banner { position: fixed; top: 0; left: 0; right: 0; z-index: 30; text-align: center;
-      padding: max(env(safe-area-inset-top), 14px) 16px 12px; font-size: 14px; font-weight: 600;
-      background: linear-gradient(180deg, rgba(0,0,0,0.6), rgba(0,0,0,0)); pointer-events:none; }
-    #log { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; padding: 8px 12px;
-      font-size: 11.5px; line-height: 1.45; background: rgba(0,0,0,0.6); white-space: pre-wrap;
-      word-break: break-all; max-height: 40%; overflow:auto; display:none; }
-    .ok{color:#6ee787;} .err{color:#ff7b72;} .info{color:#79c0ff;}
-    #err { position: fixed; inset: 0; z-index: 40; display:none; flex-direction:column;
-      align-items:center; justify-content:center; gap:12px; padding:28px; text-align:center; background:#000; }
-    #err.show{ display:flex; }
-    #err button{ padding:12px 24px;border:none;border-radius:999px;background:#e8c98a;color:#1a1405;font-weight:700;font-size:15px; }
-  </style>
+  <meta name="theme-color" content="#0f1226" />
+  <title>기도하는 예수님 · AR</title>
 
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.152.0/examples/jsm/",
-      "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+  <!-- 구글 model-viewer: 화면 속 3D + 실제공간 AR(iOS Quick Look / Android Scene Viewer)을 함께 처리 -->
+  <script type="module"
+    src="https://cdn.jsdelivr.net/npm/@google/model-viewer@4.3.1/dist/model-viewer.min.js"></script>
+
+  <style>
+    :root {
+      --bg-top: #1a1f3a;
+      --bg-bottom: #0c0e1c;
+      --gold: #e8c98a;
+      --gold-soft: #f3e2bd;
+      --text: #f4f5fb;
+      --text-dim: #b9bdd4;
+      --panel: rgba(255, 255, 255, 0.08);
+      --panel-border: rgba(255, 255, 255, 0.16);
     }
-  }
-  </script>
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+                   "Pretendard", "Noto Sans KR", "Malgun Gothic", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(120% 80% at 50% 0%, #2a3160 0%, var(--bg-top) 42%, var(--bg-bottom) 100%);
+    }
+
+    .stage { position: fixed; inset: 0; display: flex; flex-direction: column; }
+
+    header {
+      text-align: center;
+      padding: max(env(safe-area-inset-top), 18px) 16px 6px;
+      pointer-events: none;
+      z-index: 3;
+    }
+    header .eyebrow {
+      font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase;
+      color: var(--gold); opacity: 0.9; margin: 0 0 4px;
+    }
+    header h1 {
+      font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em;
+    }
+
+    model-viewer {
+      flex: 1 1 auto;
+      width: 100%;
+      min-height: 0;
+      --poster-color: transparent;
+      background: transparent;
+    }
+
+    /* 로딩 오버레이 */
+    .loader {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; z-index: 4; pointer-events: none;
+      transition: opacity 0.5s ease;
+    }
+    .spinner {
+      width: 46px; height: 46px; border-radius: 50%;
+      border: 3px solid rgba(232, 201, 138, 0.25);
+      border-top-color: var(--gold);
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loader .pct { font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+    model-viewer[loaded] ~ .loader { opacity: 0; }
+
+    /* 하단 컨트롤 영역 */
+    .controls {
+      position: relative; z-index: 3;
+      display: flex; flex-direction: column; align-items: center; gap: 12px;
+      padding: 10px 16px max(env(safe-area-inset-bottom), 20px);
+    }
+
+    .hint {
+      font-size: 12.5px; color: var(--text-dim); text-align: center;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .hint svg { width: 15px; height: 15px; opacity: 0.8; }
+
+    /* AR 버튼 (지원 기기에서만 model-viewer가 표시) */
+    .ar-button {
+      appearance: none; border: none; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 9px;
+      padding: 14px 26px; border-radius: 999px;
+      font-size: 15.5px; font-weight: 600; letter-spacing: -0.01em;
+      color: #1a1405;
+      background: linear-gradient(180deg, var(--gold-soft), var(--gold));
+      box-shadow: 0 10px 28px -8px rgba(232, 201, 138, 0.55),
+                  inset 0 1px 0 rgba(255,255,255,0.5);
+      transition: transform 0.12s ease, box-shadow 0.2s ease;
+    }
+    .ar-button:active { transform: translateY(1px) scale(0.99); }
+    .ar-button svg { width: 20px; height: 20px; }
+
+    /* 에러 표시 */
+    .error {
+      position: absolute; inset: 0; z-index: 5;
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      gap: 10px; padding: 24px; text-align: center; background: var(--bg-bottom);
+    }
+    .error.show { display: flex; }
+    .error h2 { margin: 0; font-size: 17px; }
+    .error p { margin: 0; font-size: 13.5px; color: var(--text-dim); line-height: 1.6; }
+    .error button {
+      margin-top: 8px; padding: 10px 20px; border-radius: 999px; border: 1px solid var(--panel-border);
+      background: var(--panel); color: var(--text); font-size: 14px; cursor: pointer;
+    }
+  </style>
 </head>
 <body>
-  <div id="container"></div>
-  <div id="banner"><span id="bannerText">카메라 준비 중…</span></div>
-  <div id="log"></div>
-  <div id="err">
-    <h2 id="errTitle">문제가 발생했어요</h2>
-    <p id="errMsg" style="color:#b9bdd4;font-size:14px;max-width:320px;line-height:1.6;"></p>
-    <button onclick="location.reload()">다시 시도</button>
+  <div class="stage">
+    <header>
+      <p class="eyebrow">WebAR Goods</p>
+      <h1>기도하는 예수님</h1>
+    </header>
+
+    <!--
+      마커리스 네이티브 AR:
+      - 화면 3D: model-viewer가 model-opt.glb 렌더 (모든 브라우저)
+      - iPhone: quick-look (GLB→USDZ 자동 변환). 품질을 더 높이려면 assets/model.usdz 만들어 ios-src 지정.
+      - Android: scene-viewer (GLB 그대로 실제공간 배치)
+    -->
+    <model-viewer
+      id="viewer"
+      src="./assets/model-opt.glb"
+      alt="기도하는 예수님 3D 모델"
+      ar
+      ar-modes="webxr scene-viewer quick-look"
+      ar-scale="auto"
+      ar-placement="floor"
+      camera-controls
+      touch-action="pan-y"
+      auto-rotate
+      auto-rotate-delay="0"
+      rotation-per-second="18deg"
+      interaction-prompt="auto"
+      shadow-intensity="1"
+      shadow-softness="1"
+      exposure="1.05"
+      environment-image="neutral"
+      loading="eager"
+      reveal="auto">
+      <!-- AR 버튼: AR 지원 기기에서만 model-viewer가 노출 -->
+      <button class="ar-button" slot="ar-button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3z"/>
+          <path d="M3 7.5 12 12l9-4.5M12 12v9"/>
+        </svg>
+        실제 공간에서 보기
+      </button>
+    </model-viewer>
+
+    <div class="loader" id="loader">
+      <div class="spinner"></div>
+      <div class="pct" id="pct">불러오는 중…</div>
+    </div>
+
+    <div class="controls">
+      <div class="hint" id="arHint">
+        📱 아래 <b>‘실제 공간에서 보기’</b> 버튼을 누르면 카메라에 캐릭터가 떠요
+      </div>
+      <div class="hint">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>
+        </svg>
+        손가락으로 돌려보고, 두 손가락으로 확대해 보세요
+      </div>
+    </div>
+
+    <div class="error" id="error">
+      <h2>모델을 불러오지 못했어요</h2>
+      <p>인터넷 연결을 확인한 뒤 다시 시도해 주세요.<br />
+         (AR은 HTTPS 주소에서만 동작합니다.)</p>
+      <button onclick="location.reload()">다시 시도</button>
+    </div>
   </div>
 
-  <script type="module">
-    import * as THREE from 'three';
-    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-    import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-    import { MindARThree } from 'mindar-image-three';
+  <script>
+    const viewer = document.getElementById('viewer');
+    const loader = document.getElementById('loader');
+    const pct = document.getElementById('pct');
+    const errorBox = document.getElementById('error');
+    const arHint = document.getElementById('arHint');
 
-    const logEl = document.getElementById('log');
-    const bannerText = document.getElementById('bannerText');
-    function log(m, cls){ const d=document.createElement('div'); if(cls)d.className=cls; d.textContent=m; logEl.appendChild(d); logEl.scrollTop=logEl.scrollHeight; }
-    function showErr(t, m){ document.getElementById('errTitle').textContent=t; document.getElementById('errMsg').innerHTML=m; document.getElementById('err').classList.add('show'); }
+    // 로딩 진행률 표시
+    viewer.addEventListener('progress', (e) => {
+      const p = Math.round((e.detail.totalProgress || 0) * 100);
+      pct.textContent = p < 100 ? p + '%' : '거의 다 됐어요…';
+    });
 
-    // URL로 캐릭터 크기/회전/위치 조정 (?s=0.4&rx=90&y=0)
-    const q = new URLSearchParams(location.search);
-    const num = (k,d)=>{ const v=parseFloat(q.get(k)); return isNaN(v)?d:v; };
-    const S  = num('s', 0.5);
-    const RX = num('rx', 0) * Math.PI/180;
-    const RY = num('ry', 0) * Math.PI/180;
-    const RZ = num('rz', 0) * Math.PI/180;
-    const PY = num('y', 0), PX = num('x', 0), PZ = num('z', 0);
-    if (q.get('debug') === '1') logEl.style.display = 'block';
-
-    async function main(){
-      try {
-        log('MindARThree 초기화…', 'info');
-        const mindarThree = new MindARThree({
-          container: document.getElementById('container'),
-          imageTargetSrc: './assets/target.mind',
-          uiLoading: 'no', uiScanning: 'no', uiError: 'no',
-        });
-        const { renderer, scene, camera } = mindarThree;
-
-        // 조명
-        scene.add(new THREE.HemisphereLight(0xffffff, 0x444455, 1.1));
-        const dir = new THREE.DirectionalLight(0xffffff, 1.0); dir.position.set(1,2,1); scene.add(dir);
-
-        // 모델 로드 (Draco 압축본)
-        log('3D 모델 로드…', 'info');
-        const draco = new DRACOLoader();
-        draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.152.0/examples/jsm/libs/draco/');
-        const loader = new GLTFLoader(); loader.setDRACOLoader(draco);
-        const gltf = await loader.loadAsync('./assets/model-opt.glb');
-        const model = gltf.scene;
-        model.scale.set(S,S,S);
-        model.rotation.set(RX,RY,RZ);
-        model.position.set(PX,PY,PZ);
-        log('✅ 모델 로드 완료', 'ok');
-
-        const anchor = mindarThree.addAnchor(0);
-        anchor.group.add(model);
-        anchor.onTargetFound = () => { bannerText.textContent = '찾았어요! 🙏'; };
-        anchor.onTargetLost  = () => { bannerText.textContent = '마커(그림)에 카메라를 비춰주세요'; };
-
-        // 카메라 시작 (권한 요청 → 자동 시작)
-        log('카메라 시작 요청…', 'info');
-        await mindarThree.start();
-        log('✅ 카메라 시작됨', 'ok');
-        bannerText.textContent = '마커(그림)에 카메라를 비춰주세요';
-
-        // ★ 핵심: MindAR 카메라 영상을 3D 캔버스 배경 텍스처로 직접 그림 (iOS 검은화면 우회)
-        const video = mindarThree.video;
-        const tex = new THREE.VideoTexture(video);
-        tex.colorSpace = THREE.SRGBColorSpace;
-        const bgScene = new THREE.Scene();
-        const bgCam = new THREE.Camera();
-        const bgMat = new THREE.MeshBasicMaterial({ map: tex, depthTest:false, depthWrite:false });
-        const bgMesh = new THREE.Mesh(new THREE.PlaneGeometry(2,2), bgMat);
-        bgScene.add(bgMesh);
-
-        function cover(){
-          const vw = video.videoWidth, vh = video.videoHeight;
-          if (!vw || !vh) return;
-          const va = vw/vh, sa = window.innerWidth/window.innerHeight;
-          let rx=1, ry=1;
-          if (va > sa) { rx = sa/va; } else { ry = va/sa; }
-          tex.repeat.set(rx, ry);
-          tex.offset.set((1-rx)/2, (1-ry)/2);
-        }
-
-        renderer.autoClear = false;
-        renderer.setAnimationLoop(() => {
-          cover();
-          renderer.clear();
-          renderer.render(bgScene, bgCam);   // 카메라 영상(배경)
-          renderer.clearDepth();
-          renderer.render(scene, camera);     // 마커에 고정된 3D
-        });
-        log('✅ 렌더 루프 시작 (배경=카메라 텍스처)', 'ok');
-      } catch (e) {
-        log('❌ ' + (e && (e.name+': '+e.message) || e), 'err');
-        const msg = (e && e.name === 'NotAllowedError')
-          ? '카메라 권한이 거부됐어요. 사파리 설정에서 카메라를 허용해 주세요.'
-          : '오류: ' + (e && e.message || e) + '<br/>(사파리에서 열었는지, HTTPS인지 확인해 주세요.)';
-        showErr('카메라를 시작할 수 없어요', msg);
+    // 로드 완료 → 로더 제거 + AR 미지원 기기면 안내 문구 교체
+    viewer.addEventListener('load', () => {
+      loader.style.display = 'none';
+      if (!viewer.canActivateAR) {
+        arHint.innerHTML = '💻 이 기기는 <b>화면 속 3D</b>만 지원해요 · 폰으로 QR을 열면 실제 공간 AR이 가능해요';
       }
-    }
-    main();
+    });
+
+    // 로드 실패 → 에러 표시
+    viewer.addEventListener('error', (e) => {
+      loader.style.display = 'none';
+      errorBox.classList.add('show');
+      console.error('[model-viewer] load error:', e.detail);
+    });
   </script>
 </body>
 </html>
