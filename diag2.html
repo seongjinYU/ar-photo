@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>MindAR 렌더 진단</title>
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <style>
+    html, body { margin: 0; height: 100%; background: #111; color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif; overflow: hidden; }
+    #log { position: fixed; left:0; right:0; top:0; z-index: 99999;
+      padding: 10px 12px; font-size: 12.5px; line-height: 1.5;
+      background: rgba(0,0,0,0.78); white-space: pre-wrap; word-break: break-all;
+      max-height: 62%; overflow: auto; }
+    .ok{color:#6ee787;} .err{color:#ff7b72;} .info{color:#79c0ff;} .warn{color:#ffd479;}
+    #btn { position: fixed; left:50%; bottom: 30px; transform: translateX(-50%); z-index: 99999;
+      padding: 14px 26px; font-size: 16px; font-weight: 700; border:none; border-radius: 999px;
+      background:#e8c98a; color:#1a1405; }
+  </style>
+</head>
+<body>
+  <div id="log"></div>
+  <button id="btn">🔍 다시 검사</button>
+
+  <a-scene
+    mindar-image="imageTargetSrc: ./assets/target.mind; uiLoading: no; uiError: no; uiScanning: no;"
+    color-space="sRGB"
+    renderer="colorManagement: true, alpha: true"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false">
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+    <a-entity mindar-image-target="targetIndex: 0">
+      <a-box position="0 0 0" scale="0.3 0.3 0.3" color="#4f8cff"></a-box>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    const logEl = document.getElementById('log');
+    function log(m, cls){ const d=document.createElement('div'); if(cls)d.className=cls; d.textContent=m; logEl.appendChild(d); }
+
+    log('진단 시작 · UA Safari 확인', 'info');
+    const scene = document.querySelector('a-scene');
+
+    scene.addEventListener('arReady', () => { log('✅ arReady (MindAR 준비완료)', 'ok'); setTimeout(inspect, 1200); });
+    scene.addEventListener('arError', (e) => { log('❌ arError: ' + JSON.stringify(e.detail||{}), 'err'); });
+    scene.addEventListener('loaded', () => log('a-scene loaded', 'info'));
+
+    function inspect(){
+      log('──── DOM 검사 ────', 'info');
+      // 카메라 video 검사
+      const vids = document.querySelectorAll('video');
+      log('video 요소 개수: ' + vids.length, vids.length ? 'ok' : 'err');
+      vids.forEach((v,i)=>{
+        const cs = getComputedStyle(v);
+        log(`video[${i}] 해상도 ${v.videoWidth}x${v.videoHeight} | 재생중=${!v.paused} t=${v.currentTime.toFixed(1)}`, (!v.paused && v.videoWidth) ? 'ok':'warn');
+        log(`  display=${cs.display} visibility=${cs.visibility} opacity=${cs.opacity}`);
+        log(`  position=${cs.position} z=${cs.zIndex} 크기=${cs.width}x${cs.height}`);
+        log(`  transform=${cs.transform.slice(0,40)}`);
+      });
+      // canvas 검사
+      const cvs = document.querySelectorAll('canvas');
+      log('canvas 개수: ' + cvs.length);
+      cvs.forEach((c,i)=>{
+        const cs = getComputedStyle(c);
+        log(`canvas[${i}] buffer ${c.width}x${c.height} | z=${cs.zIndex} bg=${cs.backgroundColor}`);
+        log(`  display=${cs.display} 크기=${cs.width}x${cs.height} pos=${cs.position}`);
+      });
+      // 렌더러 alpha 여부
+      try {
+        const gl = (scene.renderer && scene.renderer.getContext) ? scene.renderer.getContext() : null;
+        if (gl) log('WebGL alpha(투명) = ' + gl.getContextAttributes().alpha, gl.getContextAttributes().alpha ? 'ok':'err');
+        if (scene.renderer) log('clearAlpha = ' + scene.renderer.getClearAlpha());
+      } catch(e){ log('렌더러 검사 실패: ' + e.message, 'warn'); }
+      log('──── 검사 끝 ────', 'info');
+    }
+
+    document.getElementById('btn').addEventListener('click', inspect);
+    // 안전망: 6초 후에도 arReady 없으면 강제 검사
+    setTimeout(()=>{ log('(6초 경과 강제검사)', 'warn'); inspect(); }, 6000);
+  </script>
+</body>
+</html>

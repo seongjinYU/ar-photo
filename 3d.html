@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f1226" />
+  <title>WebAR 굿즈</title>
+
+  <!-- 구글 model-viewer: 화면 속 3D + 실제공간 AR을 함께 처리 -->
+  <script type="module"
+    src="https://cdn.jsdelivr.net/npm/@google/model-viewer@4.3.1/dist/model-viewer.min.js"></script>
+
+  <style>
+    :root {
+      --bg-top: #1a1f3a;
+      --bg-bottom: #0c0e1c;
+      --gold: #e8c98a;
+      --gold-soft: #f3e2bd;
+      --text: #f4f5fb;
+      --text-dim: #b9bdd4;
+      --panel: rgba(255, 255, 255, 0.08);
+      --panel-border: rgba(255, 255, 255, 0.16);
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+                   "Pretendard", "Noto Sans KR", "Malgun Gothic", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(120% 80% at 50% 0%, #2a3160 0%, var(--bg-top) 42%, var(--bg-bottom) 100%);
+    }
+
+    .stage { position: fixed; inset: 0; display: flex; flex-direction: column; }
+
+    header {
+      text-align: center;
+      padding: max(env(safe-area-inset-top), 18px) 16px 6px;
+      pointer-events: none;
+      z-index: 3;
+    }
+    header .eyebrow {
+      font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase;
+      color: var(--gold); opacity: 0.9; margin: 0 0 4px;
+    }
+    header h1 {
+      font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em;
+    }
+
+    model-viewer {
+      flex: 1 1 auto;
+      width: 100%;
+      min-height: 0;
+      --poster-color: transparent;
+      background: transparent;
+    }
+
+    /* 로딩 오버레이 */
+    .loader {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; z-index: 4; pointer-events: none;
+      transition: opacity 0.5s ease;
+    }
+    .spinner {
+      width: 46px; height: 46px; border-radius: 50%;
+      border: 3px solid rgba(232, 201, 138, 0.25);
+      border-top-color: var(--gold);
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loader .pct { font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+    model-viewer[loaded] ~ .loader { opacity: 0; }
+
+    /* 하단 컨트롤 영역 */
+    .controls {
+      position: relative; z-index: 3;
+      display: flex; flex-direction: column; align-items: center; gap: 12px;
+      padding: 10px 16px max(env(safe-area-inset-bottom), 20px);
+    }
+
+    .hint {
+      font-size: 12.5px; color: var(--text-dim); text-align: center;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .hint svg { width: 15px; height: 15px; opacity: 0.8; }
+
+    /* AR 버튼 (지원 기기에서만 model-viewer가 표시) */
+    .ar-button {
+      appearance: none; border: none; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 9px;
+      padding: 14px 26px; border-radius: 999px;
+      font-size: 15.5px; font-weight: 600; letter-spacing: -0.01em;
+      color: #1a1405;
+      background: linear-gradient(180deg, var(--gold-soft), var(--gold));
+      box-shadow: 0 10px 28px -8px rgba(232, 201, 138, 0.55),
+                  inset 0 1px 0 rgba(255,255,255,0.5);
+      transition: transform 0.12s ease, box-shadow 0.2s ease;
+    }
+    .ar-button:active { transform: translateY(1px) scale(0.99); }
+    .ar-button svg { width: 20px; height: 20px; }
+
+    /* 에러 표시 */
+    .error {
+      position: absolute; inset: 0; z-index: 5;
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      gap: 10px; padding: 24px; text-align: center; background: var(--bg-bottom);
+    }
+    .error.show { display: flex; }
+    .error h2 { margin: 0; font-size: 17px; }
+    .error p { margin: 0; font-size: 13.5px; color: var(--text-dim); line-height: 1.6; }
+    .error button {
+      margin-top: 8px; padding: 10px 20px; border-radius: 999px; border: 1px solid var(--panel-border);
+      background: var(--panel); color: var(--text); font-size: 14px; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <header>
+      <p class="eyebrow">WebAR Goods</p>
+      <h1>기도하는 예수님</h1>
+    </header>
+
+    <model-viewer
+      id="viewer"
+      src="./assets/model.glb"
+      alt="기도하는 예수님 3D 모델"
+      ar
+      ar-modes="webxr scene-viewer quick-look"
+      ar-scale="auto"
+      camera-controls
+      touch-action="pan-y"
+      auto-rotate
+      auto-rotate-delay="0"
+      rotation-per-second="18deg"
+      interaction-prompt="auto"
+      shadow-intensity="1"
+      shadow-softness="1"
+      exposure="1.05"
+      environment-image="neutral"
+      loading="eager"
+      reveal="auto"
+      poster="">
+      <!-- AR 버튼: AR 지원 기기에서만 노출됨 -->
+      <button class="ar-button" slot="ar-button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3z"/>
+          <path d="M3 7.5 12 12l9-4.5M12 12v9"/>
+        </svg>
+        실제 공간에서 보기
+      </button>
+    </model-viewer>
+
+    <div class="loader" id="loader">
+      <div class="spinner"></div>
+      <div class="pct" id="pct">불러오는 중…</div>
+    </div>
+
+    <div class="controls">
+      <div class="hint">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>
+        </svg>
+        손가락으로 돌려보고, 두 손가락으로 확대해 보세요
+      </div>
+    </div>
+
+    <div class="error" id="error">
+      <h2>모델을 불러오지 못했어요</h2>
+      <p>인터넷 연결을 확인한 뒤 다시 시도해 주세요.<br />
+         (AR은 HTTPS 주소에서만 동작합니다.)</p>
+      <button onclick="location.reload()">다시 시도</button>
+    </div>
+  </div>
+
+  <script>
+    const viewer = document.getElementById('viewer');
+    const loader = document.getElementById('loader');
+    const pct = document.getElementById('pct');
+    const errorBox = document.getElementById('error');
+
+    // 로딩 진행률 표시
+    viewer.addEventListener('progress', (e) => {
+      const p = Math.round((e.detail.totalProgress || 0) * 100);
+      pct.textContent = p < 100 ? p + '%' : '거의 다 됐어요…';
+    });
+
+    // 로드 완료 → 로더 제거
+    viewer.addEventListener('load', () => {
+      loader.style.display = 'none';
+    });
+
+    // 로드 실패 → 에러 표시
+    viewer.addEventListener('error', (e) => {
+      loader.style.display = 'none';
+      errorBox.classList.add('show');
+      console.error('[model-viewer] load error:', e.detail);
+    });
+  </script>
+</body>
+</html>

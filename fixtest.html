@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>MindAR 수정 테스트</title>
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+    #msg { position: fixed; top: 12px; left: 0; right: 0; z-index: 9999; text-align: center;
+      color: #6ee787; font: 600 15px -apple-system, sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="msg">카메라 준비 중…</div>
+  <a-scene
+    mindar-image="imageTargetSrc: ./assets/target.mind; uiLoading: no; uiError: no; uiScanning: no;"
+    color-space="sRGB"
+    renderer="colorManagement: true, alpha: true"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false">
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+    <a-entity mindar-image-target="targetIndex: 0">
+      <a-box position="0 0 0" scale="0.3 0.3 0.3" color="#4f8cff"></a-box>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    const scene = document.querySelector('a-scene');
+    const msg = document.getElementById('msg');
+
+    // ★ 핵심 수정: iOS Safari에서 음수 z-index 카메라 영상이 안 보이는 버그 우회
+    function fixVideoLayer() {
+      document.querySelectorAll('video').forEach(v => { v.style.zIndex = '0'; });
+      const c = document.querySelector('canvas.a-canvas') || document.querySelector('canvas');
+      if (c) c.style.zIndex = '1';
+    }
+
+    scene.addEventListener('arReady', () => {
+      fixVideoLayer();
+      // 렌더 타이밍 따라 다시 한 번
+      setTimeout(fixVideoLayer, 300);
+      setTimeout(fixVideoLayer, 1000);
+      msg.textContent = '✅ 카메라 보이면 성공! MIND 마커에 대보세요';
+    });
+  </script>
+</body>
+</html>

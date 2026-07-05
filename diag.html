@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>카메라 진단</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #111; color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif; overflow: hidden; }
+    #cam { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover;
+      background: #000; z-index: 0; }
+    #log { position: fixed; left: 0; right: 0; top: 0; z-index: 10;
+      padding: 12px 14px; font-size: 14px; line-height: 1.55;
+      background: rgba(0,0,0,0.72); white-space: pre-wrap; word-break: break-all;
+      max-height: 55%; overflow: auto; }
+    .ok { color: #6ee787; } .err { color: #ff7b72; } .info { color: #79c0ff; }
+    #startBtn { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%);
+      z-index: 20; padding: 16px 30px; font-size: 17px; font-weight: 700; border: none;
+      border-radius: 999px; background: #e8c98a; color: #1a1405; }
+  </style>
+</head>
+<body>
+  <video id="cam" autoplay muted playsinline></video>
+  <div id="log"></div>
+  <button id="startBtn">📷 카메라 켜기 (탭)</button>
+
+  <script>
+    const logEl = document.getElementById('log');
+    const cam = document.getElementById('cam');
+    function log(msg, cls) {
+      const line = document.createElement('div');
+      if (cls) line.className = cls;
+      line.textContent = msg;
+      logEl.appendChild(line);
+    }
+
+    log('진단 시작…', 'info');
+    log('UA: ' + navigator.userAgent);
+    log('보안컨텍스트(HTTPS): ' + window.isSecureContext, window.isSecureContext ? 'ok' : 'err');
+    log('mediaDevices 있음: ' + !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+        (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ? 'ok' : 'err');
+
+    async function start() {
+      log('── 카메라 요청 시작 ──', 'info');
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          log('❌ getUserMedia 자체가 없음 (인앱 브라우저 가능성)', 'err');
+          return;
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' }, audio: false
+        });
+        log('✅ getUserMedia 성공 (카메라 스트림 받음)', 'ok');
+        const track = stream.getVideoTracks()[0];
+        log('트랙: ' + (track ? track.label || '(이름없음)' : '없음'));
+        cam.srcObject = stream;
+        cam.onloadedmetadata = () => {
+          log('영상 크기: ' + cam.videoWidth + 'x' + cam.videoHeight,
+              cam.videoWidth ? 'ok' : 'err');
+        };
+        try {
+          await cam.play();
+          log('✅ video.play() 성공 → 화면에 카메라 영상 보여야 함', 'ok');
+        } catch (e) {
+          log('❌ video.play() 실패: ' + e.name + ' - ' + e.message, 'err');
+        }
+      } catch (e) {
+        log('❌ 카메라 실패: ' + e.name + ' - ' + e.message, 'err');
+        if (e.name === 'NotAllowedError') log('→ 카메라 권한이 거부됨', 'err');
+        if (e.name === 'NotFoundError') log('→ 카메라를 못 찾음', 'err');
+        if (e.name === 'NotReadableError') log('→ 다른 앱이 카메라 사용 중', 'err');
+      }
+    }
+
+    document.getElementById('startBtn').addEventListener('click', start);
+    // 자동 시도(권한 있으면 바로 켜짐)
+    window.addEventListener('load', () => setTimeout(start, 400));
+  </script>
+</body>
+</html>
