@@ -1,0 +1,10 @@
+# 배포 불필요 (개발 소스/원본/문서)
+8w-app
+docs
+assets/model.glb
+qr*.png
+card-design-*.png
+card.png
+card-fused.png
+*.py
+.bkit
