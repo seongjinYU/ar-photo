@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>8th Wall · 리빙포토 (확장 트래킹)</title>
+
+  <script crossorigin="anonymous" src="./external/scripts/8frame-1.5.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" async crossorigin="anonymous" data-preload-chunks="slam"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
+
+  <style>
+    html, body { margin:0; height:100%; background:#0c0e1c; overflow:hidden;
+      font-family:-apple-system,"Apple SD Gothic Neo",sans-serif; color:#f4f5fb; }
+    #gate { position:fixed; inset:0; z-index:100; cursor:pointer;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; text-align:center; padding:24px;
+      background:radial-gradient(120% 80% at 50% 0%, #2a3160 0%, #1a1f3a 42%, #0c0e1c 100%); }
+    #gate .icon { width:72px; height:72px; color:#e8c98a; animation:breathe 2.2s ease-in-out infinite; }
+    @keyframes breathe { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+    #gate .t { font-size:19px; font-weight:700; }
+    #gate .s { font-size:13.5px; color:#b9bdd4; line-height:1.6; }
+  </style>
+</head>
+<body>
+  <div id="gate">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/>
+    </svg>
+    <div class="t">탭하여 AR 시작</div>
+    <div class="s">화면을 한 번 탭한 뒤<br>카메라 · 동작(모션) 권한을 모두 허용해 주세요</div>
+  </div>
+
+  <script>
+    // 1) 타깃 데이터 임베드 + 엔진 로드되면 설정
+    const imageTargetData = [
+      {"type":"PLANAR","properties":{"top":0,"left":0,"width":900,"height":1180,"isRotated":false,"originalWidth":900,"originalHeight":1180},"imagePath":"image-targets/our-card_luminance.jpg","metadata":null,"name":"our-card","resources":{"originalImage":"our-card_original.jpg","croppedImage":"our-card_cropped.jpg","thumbnailImage":"our-card_thumbnail.jpg","luminanceImage":"our-card_luminance.jpg"},"created":1777000000000,"updated":1777000000000}
+    ];
+    const onxrloaded = () => { XR8.XrController.configure({ imageTargetData }); };
+    window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded);
+
+    // 2) 확장 트래킹 컴포넌트: 카드 인식 시 world 좌표에 콘텐츠 고정, 잃어도 유지
+    AFRAME.registerComponent('persist-target', {
+      schema: { name: { type: 'string' } },
+      init: function () {
+        const obj = this.el.object3D;
+        obj.visible = false;
+        const sync = (e) => {
+          const d = e.detail;
+          if (!d || d.name !== this.data.name) return;
+          if (d.position) obj.position.set(d.position.x, d.position.y, d.position.z);
+          if (d.rotation) obj.quaternion.set(d.rotation.x, d.rotation.y, d.rotation.z, d.rotation.w);
+          if (typeof d.scale === 'number') obj.scale.set(d.scale, d.scale, d.scale);
+          obj.visible = true;
+        };
+        this.el.sceneEl.addEventListener('xrimagefound', sync);
+        this.el.sceneEl.addEventListener('xrimageupdated', sync);
+        // xrimagelost 는 의도적으로 무시 → world tracking이 마지막 위치를 유지
+      }
+    });
+
+    // 3) 씬 (xrweb = world tracking 켜짐)
+    // 영상 방향/위치 URL로 조정: ?rx=90&ry=0&rz=0&pz=0.253&py=0  (기본: 카드에 수직으로 세움)
+    const q = new URLSearchParams(location.search);
+    const RX = q.get('rx') ?? '0', RY = q.get('ry') ?? '90', RZ = q.get('rz') ?? '0';
+    const PZ = q.get('pz') ?? '0', PY = q.get('py') ?? '0';
+    const WID = q.get('w') ?? '0.9', HGT = q.get('h') ?? '0.506';
+    const SCENE = `
+      <a-scene xrextras-gesture-detector xrextras-loading xrextras-runtime-error
+        renderer="colorManagement:true" xrweb>
+        <a-assets>
+          <video id="v" autoplay muted playsinline crossorigin="anonymous" loop="true" src="assets/sample.mp4"></video>
+        </a-assets>
+        <a-camera position="0 4 10"></a-camera>
+        <a-light type="directional" intensity="0.6" position="1 1 1"></a-light>
+        <a-light type="ambient" intensity="1"></a-light>
+
+        <a-entity persist-target="name: our-card">
+          <!-- 카드에 수직으로 세운 영상 (rx=90) + 카드 위로 살짝 올림(pz) -->
+          <a-plane material="src: #v; shader: flat" width="${WID}" height="${HGT}"
+                   rotation="${RX} ${RY} ${RZ}" position="0 ${PY} ${PZ}"></a-plane>
+        </a-entity>
+      </a-scene>`;
+
+    // 4) 탭 → 모션 권한 → 씬 주입 → 영상 재생
+    let started = false;
+    async function start() {
+      if (started) return; started = true;
+      try {
+        if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function') {
+          await DeviceMotionEvent.requestPermission();
+        }
+      } catch (e) {}
+      document.getElementById('gate').style.display = 'none';
+      document.body.insertAdjacentHTML('beforeend', SCENE);
+      setTimeout(() => { const v = document.getElementById('v'); if (v) v.play().catch(()=>{}); }, 300);
+    }
+    document.getElementById('gate').addEventListener('click', start);
+  </script>
+</body>
+</html>

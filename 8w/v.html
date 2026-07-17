@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>리빙포토</title>
+
+  <script crossorigin="anonymous" src="/8w/external/scripts/8frame-1.5.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" async crossorigin="anonymous" data-preload-chunks="slam"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
+
+  <style>
+    html, body { margin:0; height:100%; background:#0c0e1c; overflow:hidden;
+      font-family:-apple-system,"Apple SD Gothic Neo",sans-serif; color:#f4f5fb; }
+    .full { position:fixed; inset:0; z-index:100; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:16px; text-align:center; padding:24px;
+      background:radial-gradient(120% 80% at 50% 0%, #2a3160 0%, #1a1f3a 42%, #0c0e1c 100%); }
+    .icon { width:72px; height:72px; color:#e8c98a; animation:breathe 2.2s ease-in-out infinite; }
+    @keyframes breathe { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+    .t { font-size:19px; font-weight:700; }
+    .s { font-size:13.5px; color:#b9bdd4; line-height:1.7; }
+    .spin { width:44px; height:44px; border-radius:50%; border:3px solid rgba(232,201,138,.25);
+      border-top-color:#e8c98a; animation:sp .9s linear infinite; }
+    @keyframes sp { to { transform:rotate(360deg); } }
+    #bar { position:fixed; left:0; right:0; bottom:max(env(safe-area-inset-bottom),14px);
+      display:none; justify-content:center; gap:10px; z-index:50; }
+    #bar button { padding:12px 18px; border:none; border-radius:999px; font-size:14px; font-weight:700;
+      background:rgba(255,255,255,0.14); color:#fff; backdrop-filter:blur(8px); }
+    #err { position:fixed; left:12px; right:12px; top:max(env(safe-area-inset-top),12px); z-index:150;
+      display:none; background:rgba(160,40,40,.92); border-radius:12px; padding:12px 14px;
+      font-size:12.5px; line-height:1.5; word-break:break-all; }
+  </style>
+</head>
+<body>
+  <div class="full" id="gate" style="cursor:pointer">
+    <div class="spin" id="gspin"></div>
+    <svg class="icon" id="gicon" style="display:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/>
+    </svg>
+    <div class="t" id="gt">영상을 찾는 중…</div>
+    <div class="s" id="gs">잠시만요</div>
+  </div>
+
+  <div class="full" id="inapp" style="display:none">
+    <div class="t">외부 브라우저로 열어주세요</div>
+    <div class="s">카카오톡·인스타 앱 안에서는 카메라 AR이 안 돼요.<br>
+      우측 상단 <b>⋮ / 공유</b> → <b>"다른 브라우저로 열기"</b><br>(안드로이드: Chrome / 아이폰: Safari)</div>
+    <button onclick="navigator.clipboard&&navigator.clipboard.writeText(location.href).then(()=>this.textContent='복사됨 ✓')"
+      style="padding:12px 22px;border:none;border-radius:999px;background:#e8c98a;color:#1a1405;font-weight:700;font-size:14px;">링크 복사</button>
+  </div>
+
+  <div id="bar">
+    <button id="bSnd">🔇</button>
+  </div>
+  <div id="err"></div>
+
+  <video id="v" autoplay muted playsinline crossorigin="anonymous" loop style="display:none"></video>
+
+  <script>
+    // ---- token & 옵션 ----
+    const token = (location.pathname.match(/\/v\/([a-z0-9-]{3,24})/i) || [,''])[1].toLowerCase()
+                || new URLSearchParams(location.search).get('t') || '';
+    const q = new URLSearchParams(location.search);
+    const KEY = '#' + (q.get('k') || '00ff00');      // 부스 배경색 (기본 초록)
+    const FX = (q.get('fx') || 'c').toLowerCase();   // c=누끼(기본) / a=액자
+
+    const UA = navigator.userAgent;
+    const IN_APP = /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i.test(UA);
+    const NOSLAM = /[?&]noslam=1/.test(location.search);
+    if (IN_APP) { document.getElementById('gate').style.display='none'; document.getElementById('inapp').style.display='flex'; }
+
+    // ---- 마커(카드) 타깃: 융합카드 + 디자인 3종 ----
+    const imageTargetData = [
+      {"type":"PLANAR","properties":{"top":0,"left":0,"width":900,"height":900,"isRotated":false,"originalWidth":900,"originalHeight":900},"imagePath":"/8w/image-targets/fused_luminance.jpg","metadata":null,"name":"fused","resources":{"originalImage":"fused_original.jpg","croppedImage":"fused_cropped.jpg","thumbnailImage":"fused_thumbnail.jpg","luminanceImage":"fused_luminance.jpg"},"created":1777000000000,"updated":1777000000000},
+      {"type":"PLANAR","properties":{"top":0,"left":0,"width":900,"height":1180,"isRotated":false,"originalWidth":900,"originalHeight":1180},"imagePath":"/8w/image-targets/card1_luminance.jpg","metadata":null,"name":"card1","resources":{"originalImage":"card1_original.jpg","croppedImage":"card1_cropped.jpg","thumbnailImage":"card1_thumbnail.jpg","luminanceImage":"card1_luminance.jpg"},"created":1777000000000,"updated":1777000000000},
+      {"type":"PLANAR","properties":{"top":0,"left":0,"width":900,"height":1180,"isRotated":false,"originalWidth":900,"originalHeight":1180},"imagePath":"/8w/image-targets/card2_luminance.jpg","metadata":null,"name":"card2","resources":{"originalImage":"card2_original.jpg","croppedImage":"card2_cropped.jpg","thumbnailImage":"card2_thumbnail.jpg","luminanceImage":"card2_luminance.jpg"},"created":1777000000000,"updated":1777000000000},
+      {"type":"PLANAR","properties":{"top":0,"left":0,"width":900,"height":1180,"isRotated":false,"originalWidth":900,"originalHeight":1180},"imagePath":"/8w/image-targets/card3_luminance.jpg","metadata":null,"name":"card3","resources":{"originalImage":"card3_original.jpg","croppedImage":"card3_cropped.jpg","thumbnailImage":"card3_thumbnail.jpg","luminanceImage":"card3_luminance.jpg"},"created":1777000000000,"updated":1777000000000}
+    ];
+    const onxrloaded = () => { XR8.XrController.configure({ imageTargetData }); };
+    window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded);
+
+    const NAMES = ['fused','card1','card2','card3'];
+    AFRAME.registerComponent('persist-any-target', {
+      init: function () {
+        const obj = this.el.object3D; obj.visible = false;
+        const sync = (e) => {
+          const d = e.detail; if (!d || !NAMES.includes(d.name)) return;
+          if (d.position) obj.position.set(d.position.x, d.position.y, d.position.z);
+          if (d.rotation) obj.quaternion.set(d.rotation.x, d.rotation.y, d.rotation.z, d.rotation.w);
+          if (typeof d.scale === 'number') obj.scale.set(d.scale, d.scale, d.scale);
+          obj.visible = true;
+        };
+        this.el.sceneEl.addEventListener('xrimagefound', sync);
+        this.el.sceneEl.addEventListener('xrimageupdated', sync);
+      }
+    });
+    AFRAME.registerComponent('chroma-video', {
+      schema: { video:{type:'selector'}, color:{type:'color',default:'#00ff00'},
+                similarity:{default:0.35}, smoothness:{default:0.08} },
+      init: function () {
+        const tex = new THREE.VideoTexture(this.data.video);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        const key = new THREE.Color(this.data.color);
+        const mat = new THREE.ShaderMaterial({
+          transparent: true,
+          uniforms: { map:{value:tex}, keyColor:{value:new THREE.Vector3(key.r,key.g,key.b)},
+                      similarity:{value:this.data.similarity}, smoothness:{value:this.data.smoothness} },
+          vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+          fragmentShader: 'uniform sampler2D map; uniform vec3 keyColor; uniform float similarity; uniform float smoothness; varying vec2 vUv;'+
+            'void main(){ vec4 c=texture2D(map,vUv); float d=distance(c.rgb,keyColor);'+
+            'float a=smoothstep(similarity,similarity+smoothness,d); if(a<0.05) discard; gl_FragColor=vec4(c.rgb,a); }'
+        });
+        const apply = () => { const m=this.el.getObject3D('mesh'); if (m) m.material = mat; };
+        this.el.getObject3D('mesh') ? apply() : this.el.addEventListener('object3dset', apply);
+      }
+    });
+    AFRAME.registerComponent('face-camera', {
+      tick: function () {
+        const cam = this.el.sceneEl.camera; if (!cam) return;
+        const p = new THREE.Vector3(); cam.getWorldPosition(p);
+        p.y = this.el.object3D.getWorldPosition(new THREE.Vector3()).y;
+        this.el.object3D.lookAt(p);
+      }
+    });
+
+    // ---- 영상 로드 → 게이트 준비 ----
+    const v = document.getElementById('v');
+    const gt = document.getElementById('gt'), gs = document.getElementById('gs');
+    let ready = false;
+    async function loadClip() {
+      if (!token) { gt.textContent = 'QR이 올바르지 않아요'; gs.textContent = '카드의 QR을 다시 스캔해 주세요'; stopSpin(); return; }
+      try {
+        const r = await fetch('/api/clip?t=' + token);
+        if (!r.ok) throw 0;
+        const { url } = await r.json();
+        v.src = url;
+        ready = true; stopSpin();
+        gt.textContent = '탭하여 AR 시작';
+        gs.innerHTML = '카메라 · 동작 권한을 허용한 뒤<br>받으신 카드에 비춰주세요';
+      } catch (e) {
+        stopSpin();
+        gt.textContent = '아직 영상이 준비되지 않았어요';
+        gs.innerHTML = '부스에서 촬영이 끝나면 이 QR로 볼 수 있어요.<br>잠시 후 새로고침해 주세요 (' + token + ')';
+      }
+    }
+    function stopSpin(){ document.getElementById('gspin').style.display='none'; document.getElementById('gicon').style.display='block'; }
+    loadClip();
+
+    // ---- 소리 ----
+    let soundOn = false;
+    function applySound(){ v.muted = !soundOn; if (soundOn) v.play().catch(()=>{});
+      document.getElementById('bSnd').textContent = soundOn ? '🔊' : '🔇'; }
+    document.getElementById('bSnd').addEventListener('click', (ev)=>{ ev.stopPropagation(); soundOn=!soundOn; applySound(); });
+
+    // ---- 씬 ----
+    function sceneHTML() {
+      const vw = v.videoWidth || 540, vh = v.videoHeight || 960;
+      const W = 0.62, H = +(W * vh / vw).toFixed(3);
+      const content = (FX === 'a')
+        ? `<a-box position="0 0.303 0.07" width="1.04" height="0.07" depth="0.14" material="color:#e8c98a;metalness:0.4;roughness:0.4"></a-box>
+           <a-box position="0 -0.303 0.07" width="1.04" height="0.07" depth="0.14" material="color:#e8c98a;metalness:0.4;roughness:0.4"></a-box>
+           <a-box position="-0.485 0 0.07" width="0.07" height="0.54" depth="0.14" material="color:#d2af6e;metalness:0.4;roughness:0.4"></a-box>
+           <a-box position="0.485 0 0.07" width="0.07" height="0.54" depth="0.14" material="color:#d2af6e;metalness:0.4;roughness:0.4"></a-box>
+           <a-plane material="src:#v; shader:flat" width="0.9" height="0.506" position="0 0 0.01"></a-plane>`
+        : `<a-plane material="color:#111; opacity:0.3; transparent:true" geometry="primitive:circle; radius:0.28" position="0 -0.1 0.02"></a-plane>
+           <a-entity position="0 0 0.45" face-camera>
+             <a-plane chroma-video="video:#v; color:${KEY}" width="${W}" height="${H}"></a-plane>
+           </a-entity>`;
+      const xrweb = NOSLAM ? 'xrweb="disableWorldTracking: true"' : 'xrweb';
+      return `<a-scene xrextras-gesture-detector xrextras-loading xrextras-runtime-error xrextras-almost-there
+        renderer="colorManagement:true" ${xrweb}>
+        <a-camera position="0 4 10"></a-camera>
+        <a-light type="directional" intensity="0.7" position="1 2 2"></a-light>
+        <a-light type="ambient" intensity="0.9"></a-light>
+        <a-entity persist-any-target>${content}</a-entity>
+      </a-scene>`;
+    }
+
+    function onXrError(e) {
+      if (!NOSLAM) { const u = new URL(location.href); u.searchParams.set('noslam','1'); location.replace(u); return; }
+      const box = document.getElementById('err');
+      box.style.display = 'block';
+      box.textContent = 'AR 엔진 오류 — 안드로이드: Chrome / 아이폰: Safari 로 열어주세요. ' + JSON.stringify((e&&e.detail)||'');
+    }
+
+    let started = false;
+    document.getElementById('gate').addEventListener('click', async () => {
+      if (started || IN_APP || !ready) return; started = true;
+      try { v.muted = false; await v.play(); soundOn = true; }
+      catch (e) { v.muted = true; v.play().catch(()=>{}); soundOn = false; }
+      try {
+        if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function')
+          await DeviceMotionEvent.requestPermission();
+      } catch (e) {}
+      // 영상 메타(가로세로) 확보 후 씬 구성
+      if (!v.videoWidth) await new Promise(r => { v.addEventListener('loadedmetadata', r, {once:true}); setTimeout(r, 1500); });
+      document.getElementById('gate').style.display = 'none';
+      document.body.insertAdjacentHTML('beforeend', sceneHTML());
+      const scene = document.querySelector('a-scene');
+      scene.addEventListener('xrerror', onXrError);
+      document.getElementById('bar').style.display = 'flex';
+      applySound();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>AR 기기 진단</title>
+  <style>
+    body { margin:0; padding:18px; background:#0c0e1c; color:#f4f5fb;
+      font-family:-apple-system, "Apple SD Gothic Neo", sans-serif; font-size:16px; line-height:1.5; }
+    h2 { font-size:20px; margin:0 0 12px; }
+    #start { width:100%; padding:18px; font-size:18px; font-weight:700; border:none; border-radius:14px;
+      background:#e8c98a; color:#1a1405; margin-bottom:16px; }
+    .row { display:flex; gap:8px; align-items:flex-start; padding:9px 0; border-bottom:1px solid #ffffff18; }
+    .badge { flex:0 0 auto; width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700; }
+    .ok { background:#1f7a3f; } .no { background:#8a2b2b; } .info { background:#334; }
+    .label { font-weight:600; }
+    .extra { color:#9aa0bf; font-size:13px; word-break:break-all; }
+  </style>
+</head>
+<body>
+  <h2>🔍 AR 기기 진단</h2>
+  <button id="start">▶ 진단 시작 (여기 탭)</button>
+  <div id="log"></div>
+
+  <!-- 8th Wall 엔진이 로드되는지도 확인 -->
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" async crossorigin="anonymous" data-preload-chunks="slam"></script>
+
+  <script>
+    const logEl = document.getElementById('log');
+    function log(label, state, extra) {
+      const cls = state === true ? 'ok' : state === false ? 'no' : 'info';
+      const mark = state === true ? '✓' : state === false ? '✕' : 'i';
+      const row = document.createElement('div'); row.className = 'row';
+      row.innerHTML = '<div class="badge ' + cls + '">' + mark + '</div>' +
+        '<div><div class="label">' + label + '</div>' + (extra ? '<div class="extra">' + extra + '</div>' : '') + '</div>';
+      logEl.appendChild(row);
+    }
+
+    // 즉시 확인 가능한 것들
+    log('기기(UserAgent)', 'i', navigator.userAgent);
+    let gl = null;
+    try { const c = document.createElement('canvas'); gl = c.getContext('webgl') || c.getContext('experimental-webgl'); } catch(e){}
+    log('WebGL', !!gl);
+    log('WebAssembly', typeof WebAssembly === 'object');
+    log('카메라 API(getUserMedia)', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
+    log('DeviceMotionEvent 존재', typeof DeviceMotionEvent !== 'undefined');
+    log('모션 권한요청 함수', typeof (window.DeviceMotionEvent && DeviceMotionEvent.requestPermission) === 'function', 'iOS 13+는 이게 있어야 정상');
+    log('보안컨텍스트(HTTPS)', window.isSecureContext);
+
+    window.addEventListener('xrloaded', () => log('8th Wall 엔진 로드됨', true));
+    setTimeout(() => log('8th Wall 엔진(XR8) 존재', !!window.XR8, window.XR8 ? '' : '엔진 스크립트가 실행 안 됨'), 3500);
+
+    window.onerror = (m) => log('❗ JS 에러', false, String(m));
+    window.addEventListener('unhandledrejection', (e) => log('❗ Promise 에러', false, String(e.reason)));
+
+    document.getElementById('start').onclick = async () => {
+      // ★ 모션 권한을 "가장 먼저" 요청 (탭 제스처가 살아있는 상태여야 함)
+      try {
+        if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function') {
+          const p = await DeviceMotionEvent.requestPermission();   // 이 await가 핸들러의 '첫' await
+          log('모션 권한', p === 'granted', '응답: ' + p);
+        } else {
+          log('모션 권한', 'i', '프롬프트 불필요(자동 허용 기기)');
+        }
+      } catch (e) { log('모션 권한 요청 실패', false, e.name + ': ' + e.message); }
+
+      // 실제 모션 이벤트 수신
+      let got = false;
+      window.addEventListener('devicemotion', function onm(ev) {
+        if (got) return; got = true;
+        const a = ev.accelerationIncludingGravity;
+        log('모션 이벤트 수신', !!(a && a.x !== null), a ? ('x=' + (a.x||0).toFixed(1)) : '값 없음');
+      });
+      setTimeout(() => { if (!got) log('모션 이벤트 수신', false, '5초간 신호 없음 (모션 차단됨)'); }, 5000);
+
+      // 카메라 (모션 요청 뒤에)
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        log('카메라 접근 허용', true, (s.getVideoTracks()[0] || {}).label || 'OK');
+        s.getTracks().forEach(t => t.stop());
+      } catch (e) { log('카메라 접근', false, e.name + ': ' + e.message); }
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>부스 업로드</title>
+  <style>
+    body { margin:0; min-height:100vh; background:#0c0e1c; color:#f4f5fb; display:flex; align-items:center; justify-content:center;
+      font-family:-apple-system,"Apple SD Gothic Neo",sans-serif; }
+    .card { width:min(440px, 92vw); background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);
+      border-radius:20px; padding:26px; display:flex; flex-direction:column; gap:14px; }
+    h1 { margin:0 0 4px; font-size:20px; }
+    p  { margin:0; font-size:13px; color:#b9bdd4; line-height:1.6; }
+    label { font-size:13px; color:#e8c98a; font-weight:700; }
+    input[type=text] { padding:13px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.18);
+      background:rgba(0,0,0,0.3); color:#fff; font-size:16px; letter-spacing:0.06em; }
+    input[type=file] { font-size:14px; color:#b9bdd4; }
+    button { padding:15px; border:none; border-radius:999px; background:#e8c98a; color:#1a1405;
+      font-weight:800; font-size:16px; cursor:pointer; }
+    button:disabled { opacity:0.45; }
+    #bar { height:8px; border-radius:99px; background:rgba(255,255,255,0.12); overflow:hidden; display:none; }
+    #fill { height:100%; width:0%; background:#e8c98a; transition:width .2s; }
+    #out { font-size:13.5px; line-height:1.7; word-break:break-all; }
+    #out a { color:#8fd0ff; }
+    .ok { color:#6ee787; } .bad { color:#ff7b72; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🎬 리빙포토 부스 업로드</h1>
+    <p>영상(mp4)을 고르고, 건네줄 카드의 <b>번호(token)</b>를 입력하세요.<br>
+       업로드가 끝나는 순간 그 카드 QR로 볼 수 있어요.</p>
+    <label>카드 번호 (영문소문자·숫자·하이픈 3~24자)</label>
+    <input type="text" id="tok" placeholder="예: g-042" autocapitalize="none" autocomplete="off">
+    <label>영상 파일</label>
+    <input type="file" id="file" accept="video/mp4,video/quicktime,video/*">
+    <button id="go">업로드</button>
+    <div id="bar"><div id="fill"></div></div>
+    <div id="out"></div>
+  </div>
+
+  <script type="module">
+    import { upload } from 'https://esm.sh/@vercel/blob@2.0.0/client';
+
+    const $ = id => document.getElementById(id);
+    const out = $('out');
+    // ?t= 로 미리 채우기 (부스에서 카드 QR을 스캔해 이 페이지를 열도록 확장 가능)
+    const pre = new URLSearchParams(location.search).get('t');
+    if (pre) $('tok').value = pre;
+
+    $('go').onclick = async () => {
+      const t = $('tok').value.trim().toLowerCase();
+      const f = $('file').files[0];
+      out.innerHTML = '';
+      if (!/^[a-z0-9-]{3,24}$/.test(t)) { out.innerHTML = '<span class="bad">카드 번호 형식이 안 맞아요 (영문소문자/숫자/하이픈 3~24자)</span>'; return; }
+      if (!f) { out.innerHTML = '<span class="bad">영상 파일을 선택하세요</span>'; return; }
+      $('go').disabled = true; $('bar').style.display = 'block'; $('fill').style.width = '0%';
+      try {
+        await upload(`clips/${t}.mp4`, f, {
+          access: 'public',
+          handleUploadUrl: '/api/upload',
+          contentType: f.type || 'video/mp4',
+          onUploadProgress: (p) => { $('fill').style.width = (p.percentage || 0) + '%'; },
+        });
+        const link = `${location.origin}/v/${t}`;
+        out.innerHTML = `<span class="ok">✅ 업로드 완료!</span><br>확인: <a href="${link}" target="_blank">${link}</a>`;
+      } catch (e) {
+        out.innerHTML = '<span class="bad">실패: ' + (e.message || e) + '</span>';
+      } finally {
+        $('go').disabled = false;
+      }
+    };
+  </script>
+</body>
+</html>

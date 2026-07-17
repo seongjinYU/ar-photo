@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/v/:token", "destination": "/8w/v.html" }
+  ]
+}

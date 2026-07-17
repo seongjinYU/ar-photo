@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>리빙포토 · 입체감 FX 데모</title>
+
+  <script crossorigin="anonymous" src="./external/scripts/8frame-1.5.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" async crossorigin="anonymous" data-preload-chunks="slam"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
+
+  <style>
+    html, body { margin:0; height:100%; background:#0c0e1c; overflow:hidden;
+      font-family:-apple-system,"Apple SD Gothic Neo",sans-serif; color:#f4f5fb; }
+    #gate { position:fixed; inset:0; z-index:100; cursor:pointer;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; text-align:center; padding:24px;
+      background:radial-gradient(120% 80% at 50% 0%, #2a3160 0%, #1a1f3a 42%, #0c0e1c 100%); }
+    #gate .icon { width:72px; height:72px; color:#e8c98a; animation:breathe 2.2s ease-in-out infinite; }
+    @keyframes breathe { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+    #gate .t { font-size:19px; font-weight:700; }
+    #gate .s { font-size:13.5px; color:#b9bdd4; line-height:1.6; }
+    /* FX 전환 버튼 */
+    #fxbar { position:fixed; left:0; right:0; bottom:max(env(safe-area-inset-bottom),14px);
+      display:none; justify-content:center; gap:10px; z-index:50; }
+    #fxbar button { padding:12px 18px; border:none; border-radius:999px; font-size:14px; font-weight:700;
+      background:rgba(255,255,255,0.14); color:#fff; backdrop-filter:blur(8px); }
+    #fxbar button.on { background:#e8c98a; color:#1a1405; }
+  </style>
+</head>
+<body>
+  <div id="gate">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/>
+    </svg>
+    <div class="t">탭하여 AR 시작</div>
+    <div class="s">카메라 · 동작(모션) 권한을 모두 허용해 주세요<br>그다음 카드(1·2·3 아무거나)에 비추세요</div>
+  </div>
+
+  <!-- 인앱 브라우저(카톡 등) 안내 -->
+  <div id="inapp" style="display:none; position:fixed; inset:0; z-index:200; background:#0c0e1c;
+       flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:28px; text-align:center;">
+    <div style="font-size:19px; font-weight:700;">외부 브라우저로 열어주세요</div>
+    <div style="font-size:13.5px; color:#b9bdd4; line-height:1.7;">
+      카카오톡·인스타 등 앱 안 브라우저에서는<br>카메라 AR이 동작하지 않아요.<br><br>
+      우측 상단 <b>⋮ 또는 공유 버튼</b> → <b>"다른 브라우저로 열기"</b><br>
+      (안드로이드: Chrome / 아이폰: Safari)
+    </div>
+    <button onclick="navigator.clipboard&&navigator.clipboard.writeText(location.href).then(()=>this.textContent='복사됨 ✓')"
+      style="padding:12px 22px; border:none; border-radius:999px; background:#e8c98a; color:#1a1405; font-weight:700; font-size:14px;">
+      링크 복사
+    </button>
+  </div>
+
+  <!-- 엔진 에러 표시 -->
+  <div id="xrerr" style="display:none; position:fixed; left:12px; right:12px; top:max(env(safe-area-inset-top),12px);
+       z-index:150; background:rgba(160,40,40,0.92); border-radius:12px; padding:12px 14px; font-size:12.5px; line-height:1.5; word-break:break-all;"></div>
+
+  <div id="fxbar">
+    <button id="bA" class="on">A 쉐도우박스</button>
+    <button id="bB">B 플로팅</button>
+    <button id="bC">C 누끼</button>
+    <button id="bSnd">🔇</button>
+  </div>
+
+  <!-- 영상은 씬 밖(body)에 미리 둠: 게이트 탭 제스처로 소리 재생 허가를 받기 위함 -->
+  <video id="v"  autoplay muted playsinline crossorigin="anonymous" loop src="assets/sample.mp4"     style="display:none"></video>
+  <video id="vg" autoplay muted playsinline crossorigin="anonymous" loop src="assets/baby-green.mp4" style="display:none"></video>
+
+  <script>
+    // ---- 카드 3종 전부 마커 등록 ----
+    const imageTargetData = [
+      {"type":"PLANAR","properties":{"top":0,"left":0,"width":900,"height":1180,"isRotated":false,"originalWidth":900,"originalHeight":1180},"imagePath":"image-targets/card1_luminance.jpg","metadata":null,"name":"card1","resources":{"originalImage":"card1_original.jpg","croppedImage":"card1_cropped.jpg","thumbnailImage":"card1_thumbnail.jpg","luminanceImage":"card1_luminance.jpg"},"created":1777000000000,"updated":1777000000000},
+      {"type":"PLANAR","properties":{"top":0,"left":0,"width":900,"height":1180,"isRotated":false,"originalWidth":900,"originalHeight":1180},"imagePath":"image-targets/card2_luminance.jpg","metadata":null,"name":"card2","resources":{"originalImage":"card2_original.jpg","croppedImage":"card2_cropped.jpg","thumbnailImage":"card2_thumbnail.jpg","luminanceImage":"card2_luminance.jpg"},"created":1777000000000,"updated":1777000000000},
+      {"type":"PLANAR","properties":{"top":0,"left":0,"width":900,"height":1180,"isRotated":false,"originalWidth":900,"originalHeight":1180},"imagePath":"image-targets/card3_luminance.jpg","metadata":null,"name":"card3","resources":{"originalImage":"card3_original.jpg","croppedImage":"card3_cropped.jpg","thumbnailImage":"card3_thumbnail.jpg","luminanceImage":"card3_luminance.jpg"},"created":1777000000000,"updated":1777000000000},
+      {"type":"PLANAR","properties":{"top":0,"left":0,"width":900,"height":900,"isRotated":false,"originalWidth":900,"originalHeight":900},"imagePath":"image-targets/fused_luminance.jpg","metadata":null,"name":"fused","resources":{"originalImage":"fused_original.jpg","croppedImage":"fused_cropped.jpg","thumbnailImage":"fused_thumbnail.jpg","luminanceImage":"fused_luminance.jpg"},"created":1777000000000,"updated":1777000000000}
+    ];
+    const onxrloaded = () => { XR8.XrController.configure({ imageTargetData }); };
+    window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded);
+
+    // ---- 어느 카드든 잡히면 고정(확장 트래킹) ----
+    const CARD_NAMES = ['card1','card2','card3','fused'];
+    AFRAME.registerComponent('persist-any-target', {
+      init: function () {
+        const obj = this.el.object3D;
+        obj.visible = false;
+        const sync = (e) => {
+          const d = e.detail;
+          if (!d || !CARD_NAMES.includes(d.name)) return;
+          if (d.position) obj.position.set(d.position.x, d.position.y, d.position.z);
+          if (d.rotation) obj.quaternion.set(d.rotation.x, d.rotation.y, d.rotation.z, d.rotation.w);
+          if (typeof d.scale === 'number') obj.scale.set(d.scale, d.scale, d.scale);
+          obj.visible = true;
+        };
+        this.el.sceneEl.addEventListener('xrimagefound', sync);
+        this.el.sceneEl.addEventListener('xrimageupdated', sync);
+      }
+    });
+
+    // ---- 누끼: 크로마키(초록 제거) 셰이더 ----
+    AFRAME.registerComponent('chroma-video', {
+      schema: { video: {type:'selector'}, color: {type:'color', default:'#00ff00'},
+                similarity: {default:0.35}, smoothness: {default:0.08} },
+      init: function () {
+        const v = this.data.video;
+        const tex = new THREE.VideoTexture(v);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        const key = new THREE.Color(this.data.color);
+        const mat = new THREE.ShaderMaterial({
+          transparent: true,
+          uniforms: {
+            map: {value: tex}, keyColor: {value: new THREE.Vector3(key.r, key.g, key.b)},
+            similarity: {value: this.data.similarity}, smoothness: {value: this.data.smoothness},
+          },
+          vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+          fragmentShader: `
+            uniform sampler2D map; uniform vec3 keyColor; uniform float similarity; uniform float smoothness;
+            varying vec2 vUv;
+            void main(){
+              vec4 c = texture2D(map, vUv);
+              float d = distance(c.rgb, keyColor);
+              float a = smoothstep(similarity, similarity + smoothness, d);
+              if (a < 0.05) discard;
+              gl_FragColor = vec4(c.rgb, a);
+            }`
+        });
+        const apply = () => { const m = this.el.getObject3D('mesh'); if (m) m.material = mat; };
+        this.el.getObject3D('mesh') ? apply() : this.el.addEventListener('object3dset', apply);
+      }
+    });
+
+    // ---- 누끼 인물이 항상 카메라를 보게 (방향 문제 원천 차단) ----
+    AFRAME.registerComponent('face-camera', {
+      tick: function () {
+        const cam = this.el.sceneEl.camera;
+        if (!cam) return;
+        const p = new THREE.Vector3();
+        cam.getWorldPosition(p);
+        p.y = this.el.object3D.getWorldPosition(new THREE.Vector3()).y; // 수평으로만 회전
+        this.el.object3D.lookAt(p);
+      }
+    });
+
+    // ---- 인앱 브라우저 감지 (카톡/네이버/인스타/페북/라인/웹뷰) ----
+    const UA = navigator.userAgent;
+    const IN_APP = /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i.test(UA);
+    if (IN_APP) {
+      document.getElementById('gate').style.display = 'none';
+      document.getElementById('inapp').style.display = 'flex';
+    }
+
+    // ---- SLAM(월드트래킹) 실패 시 자동 폴백: ?noslam=1 로 재시도 ----
+    const NOSLAM = /[?&]noslam=1/.test(location.search);
+    function onXrError(e) {
+      const detail = (e && e.detail && JSON.stringify(e.detail)) || '알 수 없는 엔진 오류';
+      if (!NOSLAM) {
+        // 월드트래킹 끄고 이미지 트래킹만으로 재시도 (구형/미지원 안드로이드 대응)
+        const u = new URL(location.href); u.searchParams.set('noslam', '1');
+        location.replace(u.toString());
+        return;
+      }
+      const box = document.getElementById('xrerr');
+      box.style.display = 'block';
+      box.textContent = 'AR 엔진 오류: ' + detail + ' — 기기/브라우저가 지원되지 않을 수 있어요. (안드로이드: Chrome, 아이폰: Safari 권장)';
+    }
+
+    // ---- 씬 ----
+    const XRWEB = NOSLAM ? 'xrweb="disableWorldTracking: true"' : 'xrweb';
+    const SCENE = `
+      <a-scene xrextras-gesture-detector xrextras-loading xrextras-runtime-error xrextras-almost-there
+        renderer="colorManagement:true" ${XRWEB}>
+        <a-camera position="0 4 10"></a-camera>
+        <a-light type="directional" intensity="0.7" position="1 2 2"></a-light>
+        <a-light type="ambient" intensity="0.9"></a-light>
+
+        <a-entity id="anchor" persist-any-target>
+
+          <!-- A. 쉐도우박스: 프레임 4변이 앞으로 돌출(깊이 0.14), 영상은 안쪽(카드면)에 -->
+          <a-entity id="fxA">
+            <a-box position="0 0.303 0.07" width="1.04" height="0.07" depth="0.14" material="color:#e8c98a; metalness:0.4; roughness:0.4"></a-box>
+            <a-box position="0 -0.303 0.07" width="1.04" height="0.07" depth="0.14" material="color:#e8c98a; metalness:0.4; roughness:0.4"></a-box>
+            <a-box position="-0.485 0 0.07" width="0.07" height="0.54" depth="0.14" material="color:#d2af6e; metalness:0.4; roughness:0.4"></a-box>
+            <a-box position="0.485 0 0.07" width="0.07" height="0.54" depth="0.14" material="color:#d2af6e; metalness:0.4; roughness:0.4"></a-box>
+            <a-plane material="src:#v; shader:flat" width="0.9" height="0.506" position="0 0 0.01"></a-plane>
+          </a-entity>
+
+          <!-- B. 플로팅: 영상이 카드 위에 떠 있고, 카드면에 그림자 + 뒤판 -->
+          <a-entity id="fxB" visible="false">
+            <a-plane material="color:#111; opacity:0.35; transparent:true" width="0.86" height="0.48" position="0.02 -0.03 0.01"></a-plane>
+            <a-plane material="color:#1a1f3a; opacity:0.9" width="0.96" height="0.56" position="0 0 0.05"></a-plane>
+            <a-plane material="src:#v; shader:flat" width="0.9" height="0.506" position="0 0 0.22"></a-plane>
+          </a-entity>
+
+          <!-- C. 누끼: 초록 제거된 인물이 카드에서 일어서서 카메라를 봄 -->
+          <a-entity id="fxC" visible="false">
+            <a-plane material="color:#111; opacity:0.3; transparent:true" width="0.5" height="0.5" rotation="0 0 0" position="0 -0.1 0.02"
+                     geometry="primitive:circle; radius:0.28"></a-plane>
+            <a-entity position="0 0 0.45" face-camera>
+              <!-- 아기 영상 540x960 비율(0.5625)에 맞춤 -->
+              <a-plane chroma-video="video:#vg; color:#00ff00" width="0.60" height="1.067"></a-plane>
+            </a-entity>
+          </a-entity>
+
+        </a-entity>
+      </a-scene>`;
+
+    // ---- 게이트 → 권한 → 씬 ----
+    // ---- 소리: FX별 라우팅 (A/B → #v, C(누끼) → #vg) ----
+    let soundOn = false;
+    function setSoundUI(on) {
+      document.getElementById('bSnd').textContent = on ? '🔊' : '🔇';
+    }
+    function applySound() {
+      const activeC = document.getElementById('bC').classList.contains('on');
+      const v = document.getElementById('v'), vg = document.getElementById('vg');
+      if (v)  v.muted  = !(soundOn && !activeC);
+      if (vg) vg.muted = !(soundOn && activeC);
+      if (soundOn) { const a = activeC ? vg : v; if (a) a.play().catch(()=>{}); }
+      setSoundUI(soundOn);
+    }
+    let started = false;
+    async function start() {
+      if (started || IN_APP) return; started = true;
+      // (1) 제스처가 살아있는 지금, 소리 켠 채 재생 시도 (실패하면 음소거 유지)
+      const v = document.getElementById('v');
+      try {
+        v.muted = false;
+        await v.play();
+        soundOn = true;
+      } catch (e) {
+        v.muted = true; v.play().catch(()=>{});
+        soundOn = false;
+      }
+      applySound();
+      // (2) 그 다음 iOS 모션 권한 (안드로이드는 자동 통과)
+      try {
+        if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function') {
+          await DeviceMotionEvent.requestPermission();
+        }
+      } catch (e) {}
+      document.getElementById('gate').style.display = 'none';
+      document.body.insertAdjacentHTML('beforeend', SCENE);
+      const scene = document.querySelector('a-scene');
+      scene.addEventListener('xrerror', onXrError);
+      scene.addEventListener('camerastatuschange', (e) => {
+        if (e.detail && e.detail.status === 'failed') {
+          const box = document.getElementById('xrerr');
+          box.style.display = 'block';
+          box.textContent = '카메라를 시작할 수 없어요. 브라우저 설정에서 카메라 권한을 허용해 주세요.';
+        }
+      });
+      document.getElementById('fxbar').style.display = 'flex';
+      setTimeout(() => { ['v','vg'].forEach(id => { const v=document.getElementById(id); if (v) v.play().catch(()=>{}); }); }, 300);
+    }
+    document.getElementById('gate').addEventListener('click', start);
+
+    // ---- 소리 토글 (탭 = 제스처라 항상 허용됨) ----
+    document.getElementById('bSnd').addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      soundOn = !soundOn;
+      applySound();
+    });
+
+    // ---- FX 전환 ----
+    const modes = { bA:'fxA', bB:'fxB', bC:'fxC' };
+    Object.keys(modes).forEach(bid => {
+      document.getElementById(bid).addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        Object.entries(modes).forEach(([b, fx]) => {
+          const on = b === bid;
+          document.getElementById(b).classList.toggle('on', on);
+          const el = document.getElementById(fx);
+          if (el) el.setAttribute('visible', on);
+        });
+        applySound();   // 활성 FX의 영상으로 소리 전환
+      });
+    });
+  </script>
+</body>
+</html>
