@@ -1,3 +1,9 @@
+# Node
+node_modules/
+
+# Node
+node_modules
+
 # Vercel
 .vercel
 
