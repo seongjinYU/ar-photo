@@ -1,6 +1,10 @@
 # Vercel
 .vercel
 
+# 8th Wall 공식 샘플 (참고용 로컬 사본).
+# 빌드·배포에 쓰이지 않고, Niantic XR 엔진이 포함되어 공개 배포가 제한됨.
+8w-app/
+
 # bkit tooling state
 .bkit
 
