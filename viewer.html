@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#000" />
+  <title>리빙포토 · AR</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; color:#fff; }
+    #container { position: fixed; inset: 0; }
+    /* 마커 찾기 전 안내 (아주 최소) */
+    #hint { position: fixed; left:0; right:0; bottom: max(env(safe-area-inset-bottom), 20px);
+      text-align:center; font-size:13.5px; color:#e8c98a; z-index:20; pointer-events:none;
+      text-shadow:0 1px 4px rgba(0,0,0,.6); transition:opacity .4s; }
+    #err { position: fixed; inset: 0; z-index: 40; display:none; flex-direction:column;
+      align-items:center; justify-content:center; gap:14px; padding:28px; text-align:center; background:#000; }
+    #err.show{ display:flex; }
+    #err p{ color:#b9bdd4; font-size:14px; max-width:320px; line-height:1.6; margin:0; }
+    #err button{ padding:12px 24px;border:none;border-radius:999px;background:#e8c98a;color:#1a1405;font-weight:700;font-size:15px; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.152.0/examples/jsm/",
+      "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="container"></div>
+  <div id="hint">카드에 카메라를 비춰주세요</div>
+  <div id="err"><p id="errMsg"></p><button onclick="location.reload()">다시 시도</button></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { MindARThree } from 'mindar-image-three';
+
+    // 테스트: 영상 URL을 ?v= 로 바꿀 수 있음 (기본 샘플)
+    const q = new URLSearchParams(location.search);
+    const VIDEO_URL = q.get('v') || './assets/sample.mp4';
+
+    const hint = document.getElementById('hint');
+    function showErr(m){ document.getElementById('errMsg').innerHTML=m; document.getElementById('err').classList.add('show'); }
+
+    // 영상 엘리먼트 (iOS 자동재생: muted + playsinline)
+    const video = document.createElement('video');
+    video.src = VIDEO_URL;
+    video.loop = true; video.muted = true; video.playsInline = true;
+    video.crossOrigin = 'anonymous';
+    video.setAttribute('playsinline',''); video.setAttribute('webkit-playsinline',''); video.setAttribute('muted','');
+    const tryPlay = () => video.play().catch(()=>{});
+
+    async function main(){
+      try {
+        const mindarThree = new MindARThree({
+          container: document.getElementById('container'),
+          imageTargetSrc: './assets/target.mind',
+          uiLoading:'no', uiScanning:'no', uiError:'no',
+          filterMinCF: 0.00005, filterBeta: 0.001,  // 강한 흔들림 억제(고정감)
+        });
+        const { renderer, scene, camera } = mindarThree;
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.2));
+        const dir = new THREE.DirectionalLight(0xffffff, 0.9); dir.position.set(1,2,2); scene.add(dir);
+
+        // 영상 텍스처
+        const vtex = new THREE.VideoTexture(video);
+        vtex.colorSpace = THREE.SRGBColorSpace;
+
+        // 3D 액자 (공통) — 작고 두툼한 입체 프레임 + 영상 스크린
+        // 작고 뭉친 형태라 마커 흔들림이 덜 증폭됨(납작 평면 대비)
+        const VW = 0.68, VH = 0.383;              // 16:9, 컴팩트
+        const DEPTH = 0.10;                        // 액자 두께(입체감)
+        const BORDER = 0.07;
+        const group = new THREE.Group();
+        const frame = new THREE.Mesh(
+          new THREE.BoxGeometry(VW + BORDER*2, VH + BORDER*2, DEPTH),
+          new THREE.MeshStandardMaterial({ color: 0xe8c98a, metalness: 0.4, roughness: 0.4 })
+        );
+        frame.position.z = 0.0;                    // 중심 z=0, 앞면 z=+DEPTH/2
+        const screen = new THREE.Mesh(
+          new THREE.PlaneGeometry(VW, VH),
+          new THREE.MeshBasicMaterial({ map: vtex })
+        );
+        screen.position.z = DEPTH/2 + 0.002;       // 앞면에 얹힘
+        group.add(frame); group.add(screen);
+
+        const anchor = mindarThree.addAnchor(0);
+        anchor.group.add(group);
+        anchor.onTargetFound = () => { hint.style.opacity = '0'; tryPlay(); };
+        anchor.onTargetLost  = () => { hint.style.opacity = '1'; };
+
+        await mindarThree.start();
+        tryPlay();
+
+        // ★ iOS 검은화면 우회: 카메라 영상을 배경 텍스처로 직접 렌더
+        const cam = mindarThree.video;
+        const bgTex = new THREE.VideoTexture(cam); bgTex.colorSpace = THREE.SRGBColorSpace;
+        const bgScene = new THREE.Scene(); const bgCam = new THREE.Camera();
+        const bgMesh = new THREE.Mesh(new THREE.PlaneGeometry(2,2),
+          new THREE.MeshBasicMaterial({ map: bgTex, depthTest:false, depthWrite:false }));
+        bgScene.add(bgMesh);
+        function cover(){
+          const vw=cam.videoWidth, vh=cam.videoHeight; if(!vw||!vh) return;
+          const va=vw/vh, sa=window.innerWidth/window.innerHeight;
+          let rx=1, ry=1; if(va>sa){ rx=sa/va; } else { ry=va/sa; }
+          bgTex.repeat.set(rx,ry); bgTex.offset.set((1-rx)/2,(1-ry)/2);
+        }
+        renderer.autoClear = false;
+        renderer.setAnimationLoop(() => {
+          cover();
+          renderer.clear();
+          renderer.render(bgScene, bgCam);
+          renderer.clearDepth();
+          renderer.render(scene, camera);
+        });
+      } catch (e) {
+        const msg = (e && e.name === 'NotAllowedError')
+          ? '카메라 권한이 필요해요. 브라우저 설정에서 카메라를 허용해 주세요.'
+          : '오류: ' + (e && e.message || e) + '<br/>(사파리/크롬 · HTTPS인지 확인)';
+        showErr(msg);
+      }
+    }
+    // 사용자가 화면을 탭하면 영상 재생 보장 (혹시 자동재생 막힐 때)
+    document.addEventListener('click', tryPlay);
+    main();
+  </script>
+</body>
+</html>
