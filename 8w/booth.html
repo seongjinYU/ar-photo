@@ -1,73 +1,144 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>부스 업로드</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>리빙포토 부스</title>
   <style>
-    body { margin:0; min-height:100vh; background:#0c0e1c; color:#f4f5fb; display:flex; align-items:center; justify-content:center;
-      font-family:-apple-system,"Apple SD Gothic Neo",sans-serif; }
-    .card { width:min(440px, 92vw); background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);
-      border-radius:20px; padding:26px; display:flex; flex-direction:column; gap:14px; }
-    h1 { margin:0 0 4px; font-size:20px; }
-    p  { margin:0; font-size:13px; color:#b9bdd4; line-height:1.6; }
-    label { font-size:13px; color:#e8c98a; font-weight:700; }
-    input[type=text] { padding:13px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.18);
-      background:rgba(0,0,0,0.3); color:#fff; font-size:16px; letter-spacing:0.06em; }
-    input[type=file] { font-size:14px; color:#b9bdd4; }
-    button { padding:15px; border:none; border-radius:999px; background:#e8c98a; color:#1a1405;
-      font-weight:800; font-size:16px; cursor:pointer; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; background:#0c0e1c; color:#f4f5fb;
+      font-family:-apple-system,"Apple SD Gothic Neo",sans-serif;
+      display:flex; align-items:flex-start; justify-content:center; padding:22px 14px calc(env(safe-area-inset-bottom) + 22px); }
+    .wrap { width:min(460px,96vw); display:flex; flex-direction:column; gap:14px; }
+    h1 { margin:0; font-size:21px; }
+    .step { font-size:13px; color:#8f95b6; margin-top:-6px; }
+    #stage { position:relative; width:100%; aspect-ratio:3/4; border-radius:18px; overflow:hidden;
+      background:#151934; border:1px solid rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; }
+    #prev { width:100%; height:100%; object-fit:cover; background:#000; }
+    #hint { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center;
+      padding:24px; font-size:14px; color:#9098bd; line-height:1.7; }
+    .row { display:flex; gap:10px; }
+    button { border:none; border-radius:14px; font-weight:800; cursor:pointer; }
+    .big { padding:17px; font-size:17px; width:100%; }
+    .row .big { flex:1; }
+    .gold { background:#e8c98a; color:#1a1405; }
+    .dark { background:#242a49; color:#e8ecff; }
+    .ghost { background:transparent; color:#aab; border:1px solid rgba(255,255,255,0.2); }
     button:disabled { opacity:0.45; }
-    #bar { height:8px; border-radius:99px; background:rgba(255,255,255,0.12); overflow:hidden; display:none; }
+    #live { background:rgba(110,231,135,0.10); border:1px solid rgba(110,231,135,0.35);
+      border-radius:16px; padding:18px; display:flex; flex-direction:column; gap:12px; text-align:center; }
+    .live-msg { font-size:18px; line-height:1.55; }
+    .live-msg b { color:#8ff0a6; }
+    .sub { font-size:13px; color:#b9bdd4; line-height:1.7; }
+    #bar { height:9px; border-radius:99px; background:rgba(255,255,255,0.12); overflow:hidden; }
     #fill { height:100%; width:0%; background:#e8c98a; transition:width .2s; }
-    #out { font-size:13.5px; line-height:1.7; word-break:break-all; }
-    #out a { color:#8fd0ff; }
-    .ok { color:#6ee787; } .bad { color:#ff7b72; }
+    #out { font-size:13.5px; line-height:1.6; word-break:break-all; text-align:center; min-height:18px; }
+    .bad { color:#ff7b72; } .ok { color:#6ee787; }
+    .foot { font-size:12px; color:#5a6086; text-align:center; }
+    .foot a { color:#7f86b5; }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>🎬 리빙포토 부스 업로드</h1>
-    <p>영상(mp4)을 고르고, 건네줄 카드의 <b>번호(token)</b>를 입력하세요.<br>
-       업로드가 끝나는 순간 그 카드 QR로 볼 수 있어요.</p>
-    <label>카드 번호 (영문소문자·숫자·하이픈 3~24자)</label>
-    <input type="text" id="tok" placeholder="예: g-042" autocapitalize="none" autocomplete="off">
-    <label>영상 파일</label>
-    <input type="file" id="file" accept="video/mp4,video/quicktime,video/*">
-    <button id="go">업로드</button>
-    <div id="bar"><div id="fill"></div></div>
+  <div class="wrap">
+    <h1>🎬 리빙포토 부스</h1>
+    <div class="step" id="step">① 팀을 촬영하세요</div>
+
+    <div id="stage">
+      <video id="prev" playsinline muted loop></video>
+      <div id="hint">촬영하거나 영상을 고르면<br>여기 미리보기가 떠요</div>
+    </div>
+
+    <!-- ① 영상 확보 -->
+    <div class="row" id="pick">
+      <button id="shoot" class="big gold">🎥 촬영</button>
+      <button id="choose" class="big ghost">파일 선택</button>
+    </div>
+    <input id="cap" type="file" accept="video/*" capture="environment" hidden>
+    <input id="fil" type="file" accept="video/*" hidden>
+
+    <!-- ② 올리기 -->
+    <button id="upload" class="big gold" hidden>⬆️ 이 팀 영상 올리기</button>
+    <div id="bar" hidden><div id="fill"></div></div>
+
+    <!-- ③ 스캔 대기(LIVE) -->
+    <div id="live" hidden>
+      <div class="live-msg">✅ 올라갔어요!<br><b>지금 팀원들 카드를 스캔하세요</b></div>
+      <div class="sub">각자 카드 QR을 <b>휴대폰 기본 카메라</b>로 찍으면<br>이 영상이 그 카드에 담깁니다. (몇 장이든 OK)</div>
+      <button id="next" class="big dark">➡️ 다음 팀 (스캔 마감)</button>
+    </div>
+
     <div id="out"></div>
+    <div class="foot">한 카드만 따로 고칠 땐 → <a href="/8w/booth-manual.html">수동 업로드</a></div>
   </div>
 
   <script type="module">
     import { upload } from 'https://esm.sh/@vercel/blob@2.0.0/client';
-
     const $ = id => document.getElementById(id);
-    const out = $('out');
-    // ?t= 로 미리 채우기 (부스에서 카드 QR을 스캔해 이 페이지를 열도록 확장 가능)
-    const pre = new URLSearchParams(location.search).get('t');
-    if (pre) $('tok').value = pre;
+    let file = null;
 
-    $('go').onclick = async () => {
-      const t = $('tok').value.trim().toLowerCase();
-      const f = $('file').files[0];
-      out.innerHTML = '';
-      if (!/^[a-z0-9-]{3,24}$/.test(t)) { out.innerHTML = '<span class="bad">카드 번호 형식이 안 맞아요 (영문소문자/숫자/하이픈 3~24자)</span>'; return; }
-      if (!f) { out.innerHTML = '<span class="bad">영상 파일을 선택하세요</span>'; return; }
-      $('go').disabled = true; $('bar').style.display = 'block'; $('fill').style.width = '0%';
+    function setFile(f) {
+      if (!f) return;
+      file = f;
+      const p = $('prev');
+      p.src = URL.createObjectURL(f);
+      p.play().catch(() => {});
+      $('hint').style.display = 'none';
+      $('pick').style.display = 'none';
+      $('upload').hidden = false;
+      $('out').textContent = '';
+      $('step').textContent = '② 확인하고 올리세요';
+    }
+    $('shoot').onclick = () => $('cap').click();
+    $('choose').onclick = () => $('fil').click();
+    $('cap').onchange = e => setFile(e.target.files[0]);
+    $('fil').onchange = e => setFile(e.target.files[0]);
+
+    $('upload').onclick = async () => {
+      if (!file) return;
+      $('upload').disabled = true;
+      $('bar').hidden = false; $('fill').style.width = '0%';
+      const ext = (file.type === 'video/quicktime' || /\.mov$/i.test(file.name)) ? 'mov' : 'mp4';
+      const batchId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
       try {
-        await upload(`clips/${t}.mp4`, f, {
+        const res = await upload(`videos/${batchId}.${ext}`, file, {
           access: 'public',
           handleUploadUrl: '/api/upload',
-          contentType: f.type || 'video/mp4',
-          onUploadProgress: (p) => { $('fill').style.width = (p.percentage || 0) + '%'; },
+          contentType: file.type || 'video/mp4',
+          onUploadProgress: p => { $('fill').style.width = (p.percentage || 0) + '%'; },
         });
-        const link = `${location.origin}/v/${t}`;
-        out.innerHTML = `<span class="ok">✅ 업로드 완료!</span><br>확인: <a href="${link}" target="_blank">${link}</a>`;
+        // 방금 올린 영상을 "현재 팀 영상"으로 등록 → 이제 카드 스캔하면 이게 담긴다
+        const r = await fetch('/api/current', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ videoUrl: res.url, batchId }),
+        });
+        if (!r.ok) throw new Error('현재 영상 등록 실패 (' + r.status + ')');
+        $('upload').hidden = true; $('bar').hidden = true;
+        $('live').hidden = false;
+        $('step').textContent = '③ 팀원들이 카드를 스캔하는 중…';
       } catch (e) {
-        out.innerHTML = '<span class="bad">실패: ' + (e.message || e) + '</span>';
+        $('out').innerHTML = '<span class="bad">실패: ' + (e.message || e) + '</span>';
       } finally {
-        $('go').disabled = false;
+        $('upload').disabled = false;
       }
+    };
+
+    $('next').onclick = async () => {
+      $('next').disabled = true;
+      try {
+        await fetch('/api/current', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ close: true }),
+        });
+      } catch {}
+      // 초기 상태로 되돌리기
+      file = null;
+      const p = $('prev'); p.removeAttribute('src'); p.load();
+      $('live').hidden = true;
+      $('hint').style.display = 'flex';
+      $('pick').style.display = 'flex';
+      $('out').textContent = '';
+      $('step').textContent = '① 팀을 촬영하세요';
+      $('next').disabled = false;
     };
   </script>
 </body>

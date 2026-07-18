@@ -9,12 +9,14 @@ export default async function handler(req, res) {
       body: req.body,
       request: req,
       onBeforeGenerateToken: async (pathname) => {
-        // clips/<token>.mp4 형식만 허용 (token: 영문소문자/숫자/하이픈 3~24자)
-        if (!/^clips\/[a-z0-9-]{3,24}\.mp4$/.test(pathname)) {
+        // 허용 경로 두 종류:
+        //   videos/<batchId>.<mp4|mov>              → 부스가 올리는 "현재 팀 영상" 원본
+        //   clips/<token>[.<slot>].<mp4|mov|png|…>  → 특정 카드에 직접 붙이는 미디어(직접 업로드/구버전)
+        if (!/^(videos\/[a-z0-9-]{3,60}|clips\/[a-z0-9-]{3,24}(\.[a-z0-9-]{1,16})?)\.(mp4|mov|png|jpg|jpeg)$/.test(pathname)) {
           throw new Error('잘못된 경로: ' + pathname);
         }
         return {
-          allowedContentTypes: ['video/mp4', 'video/quicktime'],
+          allowedContentTypes: ['video/mp4', 'video/quicktime', 'image/png', 'image/jpeg'],
           addRandomSuffix: false,
           allowOverwrite: true,            // 같은 token 재업로드(재촬영) 허용
           maximumSizeInBytes: 80 * 1024 * 1024,

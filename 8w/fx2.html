@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>리빙포토 · 깊이 프레임 + 로고 풍선</title>
+
+  <script crossorigin="anonymous" src="/8w/external/scripts/8frame-1.5.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" async crossorigin="anonymous" data-preload-chunks="slam"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
+
+  <style>
+    html, body { margin:0; height:100%; background:#0c0e1c; overflow:hidden;
+      font-family:-apple-system,"Apple SD Gothic Neo",sans-serif; color:#f4f5fb; }
+    .full { position:fixed; inset:0; z-index:100; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:16px; text-align:center; padding:24px;
+      background:radial-gradient(120% 80% at 50% 0%, #2a3160 0%, #1a1f3a 42%, #0c0e1c 100%); }
+    .icon { width:72px; height:72px; color:#e8c98a; animation:breathe 2.2s ease-in-out infinite; }
+    @keyframes breathe { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+    .t { font-size:19px; font-weight:700; }
+    .s { font-size:13.5px; color:#b9bdd4; line-height:1.7; }
+    .spin { width:44px; height:44px; border-radius:50%; border:3px solid rgba(232,201,138,.25);
+      border-top-color:#e8c98a; animation:sp .9s linear infinite; }
+    @keyframes sp { to { transform:rotate(360deg); } }
+    #bar { position:fixed; left:0; right:0; bottom:max(env(safe-area-inset-bottom),14px);
+      display:none; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; z-index:50; padding:0 12px; }
+    #bar .pill { display:flex; align-items:center; gap:9px; padding:9px 14px; border-radius:999px;
+      background:rgba(20,24,44,0.72); backdrop-filter:blur(8px); }
+    #bar label { font-size:12.5px; font-weight:800; color:#e8c98a; }
+    #bar input[type=range] { width:min(38vw,180px); }
+    #bar button { padding:10px 13px; border:none; border-radius:999px; font-size:13.5px; font-weight:800;
+      background:rgba(255,255,255,0.14); color:#fff; backdrop-filter:blur(8px); }
+    #bar button.on { background:#e8c98a; color:#1a1405; }
+    #err { position:fixed; left:12px; right:12px; top:max(env(safe-area-inset-top),12px); z-index:150;
+      display:none; background:rgba(160,40,40,.92); border-radius:12px; padding:12px 14px;
+      font-size:12.5px; line-height:1.5; word-break:break-all; }
+  </style>
+</head>
+<body>
+  <div class="full" id="gate" style="cursor:pointer">
+    <div class="spin" id="gspin"></div>
+    <svg class="icon" id="gicon" style="display:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/>
+    </svg>
+    <div class="t" id="gt">영상 찾는 중…</div>
+    <div class="s" id="gs">잠시만요</div>
+  </div>
+
+  <div class="full" id="inapp" style="display:none">
+    <div class="t">외부 브라우저로 열어주세요</div>
+    <div class="s">카카오톡·인스타 앱 안에서는 카메라 AR이 안 돼요.<br>
+      우측 상단 <b>⋮ / 공유</b> → <b>"다른 브라우저로 열기"</b><br>(안드로이드: Chrome / 아이폰: Safari)</div>
+  </div>
+
+  <div id="bar">
+    <button id="tVert">📐 수직</button>
+    <button id="tHorz">▭ 수평</button>
+    <div class="pill"><label>깊이</label><input id="depth" type="range" min="0" max="0.9" step="0.01" value="0.45"></div>
+    <button id="tSpark" class="on">🌟 반짝이</button>
+    <button id="tSnd">🔇</button>
+  </div>
+  <div id="err"></div>
+
+  <div id="media" style="display:none"></div>
+
+  <script>
+    // ================= 옵션 =================
+    const q = new URLSearchParams(location.search);
+    const token = (location.pathname.match(/\/(?:v|fx)\/([a-z0-9-]{3,24})/i) || [,''])[1].toLowerCase()
+                || q.get('t') || 'demo01';
+    let W    = +(q.get('w') || 1.0);
+    let GAP  = +(q.get('depth') || 0.45);       // 프레임↔사진 깊이
+    let LIFT = +(q.get('lift') || 0.16);        // 카드와의 간격(띄우기)
+    let orient = (q.get('orient') === 'h') ? 'h' : 'v';   // v=수직 / h=수평
+    let showSpark = q.get('spark') !== '0';
+    const PN    = Math.min(160, +(q.get('pn') || 80));
+    const PSIZE = +(q.get('psize') || 110);
+    const SPARK = '#' + (q.get('sparkcol') || 'fff2cf');
+    const FRAME = q.get('frame') || '/8w/assets/frameOverlay.png';
+
+    const UA = navigator.userAgent;
+    const IN_APP = /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i.test(UA);
+    const NOSLAM = /[?&]noslam=1/.test(location.search);
+    if (IN_APP) { document.getElementById('gate').style.display='none'; document.getElementById('inapp').style.display='flex'; }
+
+    // ================= 마커(카드) 타깃 =================
+    const imageTargetData = [
+      {"type":"PLANAR","properties":{"top":0,"left":0,"width":900,"height":900,"isRotated":false,"originalWidth":900,"originalHeight":900},"imagePath":"/8w/image-targets/fused_luminance.jpg","metadata":null,"name":"fused","resources":{"originalImage":"fused_original.jpg","croppedImage":"fused_cropped.jpg","thumbnailImage":"fused_thumbnail.jpg","luminanceImage":"fused_luminance.jpg"},"created":1777000000000,"updated":1777000000000},
+      {"type":"PLANAR","properties":{"top":0,"left":0,"width":900,"height":1180,"isRotated":false,"originalWidth":900,"originalHeight":1180},"imagePath":"/8w/image-targets/card1_luminance.jpg","metadata":null,"name":"card1","resources":{"originalImage":"card1_original.jpg","croppedImage":"card1_cropped.jpg","thumbnailImage":"card1_thumbnail.jpg","luminanceImage":"card1_luminance.jpg"},"created":1777000000000,"updated":1777000000000},
+      {"type":"PLANAR","properties":{"top":0,"left":0,"width":900,"height":1180,"isRotated":false,"originalWidth":900,"originalHeight":1180},"imagePath":"/8w/image-targets/card2_luminance.jpg","metadata":null,"name":"card2","resources":{"originalImage":"card2_original.jpg","croppedImage":"card2_cropped.jpg","thumbnailImage":"card2_thumbnail.jpg","luminanceImage":"card2_luminance.jpg"},"created":1777000000000,"updated":1777000000000},
+      {"type":"PLANAR","properties":{"top":0,"left":0,"width":900,"height":1180,"isRotated":false,"originalWidth":900,"originalHeight":1180},"imagePath":"/8w/image-targets/card3_luminance.jpg","metadata":null,"name":"card3","resources":{"originalImage":"card3_original.jpg","croppedImage":"card3_cropped.jpg","thumbnailImage":"card3_thumbnail.jpg","luminanceImage":"card3_luminance.jpg"},"created":1777000000000,"updated":1777000000000},
+      {"type":"PLANAR","properties":{"top":0,"left":0,"width":900,"height":900,"isRotated":false,"originalWidth":900,"originalHeight":900},"imagePath":"/8w/image-targets/fxcard_luminance.jpg","metadata":null,"name":"fxcard","resources":{"originalImage":"fxcard_original.jpg","croppedImage":"fxcard_cropped.jpg","thumbnailImage":"fxcard_thumbnail.jpg","luminanceImage":"fxcard_luminance.jpg"},"created":1777000000000,"updated":1777000000000}
+    ];
+    const onxrloaded = () => { XR8.XrController.configure({ imageTargetData }); };
+    window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded);
+
+    const NAMES = ['fused','card1','card2','card3','fxcard'];
+    AFRAME.registerComponent('persist-any-target', {
+      init: function () {
+        const obj = this.el.object3D; obj.visible = false;
+        const sync = (e) => {
+          const d = e.detail; if (!d || !NAMES.includes(d.name)) return;
+          if (d.position) obj.position.set(d.position.x, d.position.y, d.position.z);
+          if (d.rotation) obj.quaternion.set(d.rotation.x, d.rotation.y, d.rotation.z, d.rotation.w);
+          if (typeof d.scale === 'number') obj.scale.set(d.scale, d.scale, d.scale);
+          obj.visible = true;
+        };
+        this.el.sceneEl.addEventListener('xrimagefound', sync);
+        this.el.sceneEl.addEventListener('xrimageupdated', sync);
+      }
+    });
+
+    // ================= 로고 풍선 (다른 세션 오브젝트 이식) =================
+    function puffyGeom(shape, depth, bevel){
+      const g=new THREE.ExtrudeGeometry(shape,{depth,bevelEnabled:true,bevelThickness:bevel,bevelSize:bevel,bevelSegments:6,steps:1,curveSegments:24}); g.center(); return g; }
+    function roundedRectShape(w,h,r){ const s=new THREE.Shape(),x=-w/2,y=-h/2;
+      s.moveTo(x+r,y); s.lineTo(x+w-r,y); s.quadraticCurveTo(x+w,y,x+w,y+r);
+      s.lineTo(x+w,y+h-r); s.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+      s.lineTo(x+r,y+h); s.quadraticCurveTo(x,y+h,x,y+h-r);
+      s.lineTo(x,y+r); s.quadraticCurveTo(x,y,x+r,y); return s; }
+    function roundedPolyShape(pts,r){ const s=new THREE.Shape(),n=pts.length;
+      for(let i=0;i<n;i++){ const p0=pts[(i-1+n)%n],p1=pts[i],p2=pts[(i+1)%n];
+        const v1=p1.clone().sub(p0).normalize(),v2=p2.clone().sub(p1).normalize();
+        const a=p1.clone().sub(v1.multiplyScalar(r)),b=p1.clone().add(v2.multiplyScalar(r));
+        i===0?s.moveTo(a.x,a.y):s.lineTo(a.x,a.y); s.quadraticCurveTo(p1.x,p1.y,b.x,b.y);} s.closePath(); return s; }
+    function heartShape(){ const s=new THREE.Shape(); s.moveTo(0,0.3);
+      s.bezierCurveTo(0,0.45,-0.2,0.75,-0.5,0.75); s.bezierCurveTo(-0.9,0.75,-0.9,0.25,-0.9,0.25);
+      s.bezierCurveTo(-0.9,0.0,-0.6,-0.3,0,-0.7); s.bezierCurveTo(0.6,-0.3,0.9,0.0,0.9,0.25);
+      s.bezierCurveTo(0.9,0.25,0.9,0.75,0.5,0.75); s.bezierCurveTo(0.2,0.75,0,0.45,0,0.3); return s; }
+    function triShape(){ const pts=[]; for(let i=0;i<3;i++){ const a=Math.PI/2+i*2*Math.PI/3; pts.push(new THREE.Vector2(Math.cos(a)*0.62,Math.sin(a)*0.62)); } return roundedPolyShape(pts,0.2); }
+    function squareHoleShape(){ const s=roundedRectShape(1.0,1.0,0.28); const hole=new THREE.Path(); hole.absellipse(0,-0.12,0.2,0.1,0,Math.PI*2); s.holes.push(hole); return s; }
+    AFRAME.registerComponent('balloon',{
+      schema:{shape:{default:'heart'},color:{type:'color',default:'#ec4d9b'},size:{default:0.15}},
+      init:function(){
+        const mat=new THREE.MeshPhysicalMaterial({color:new THREE.Color(this.data.color),metalness:0.0,roughness:0.12,clearcoat:1.0,clearcoatRoughness:0.12,envMapIntensity:1.3,reflectivity:0.6});
+        const g=new THREE.Group(), sh=this.data.shape;
+        if(sh==='tri') g.add(new THREE.Mesh(puffyGeom(triShape(),0.5,0.2),mat));
+        else if(sh==='square') g.add(new THREE.Mesh(puffyGeom(squareHoleShape(),0.5,0.2),mat));
+        else if(sh==='z'){ const bar=(w,h)=>puffyGeom(roundedRectShape(w,h,Math.min(w,h)*0.45),0.5,0.16);
+          const top=new THREE.Mesh(bar(1.0,0.34),mat); top.position.y=0.5;
+          const bot=new THREE.Mesh(bar(1.0,0.34),mat); bot.position.y=-0.5;
+          const dg=new THREE.Mesh(bar(1.25,0.32),mat); dg.rotation.z=-0.92; g.add(top,bot,dg);
+        } else g.add(new THREE.Mesh(puffyGeom(heartShape(),0.5,0.22),mat));
+        const s0=new THREE.Vector3(); new THREE.Box3().setFromObject(g).getSize(s0);
+        g.scale.multiplyScalar(this.data.size/(Math.max(s0.x,s0.y,s0.z)||1));
+        const c=new THREE.Vector3(); new THREE.Box3().setFromObject(g).getCenter(c); g.position.sub(c);
+        this.el.setObject3D('mesh',g);
+      }
+    });
+    AFRAME.registerComponent('float3d',{
+      schema:{bob:{default:0.03},bobMs:{default:2600},spinMs:{default:11000},phase:{default:0}},
+      init:function(){ this.y0=this.el.object3D.position.y; },
+      tick:function(time){ const o=this.el.object3D,t=time+this.data.phase;
+        o.position.y=this.y0+this.data.bob*Math.sin(t/this.data.bobMs*Math.PI*2);
+        o.rotation.y=(t/this.data.spinMs)*Math.PI*2; }
+    });
+    AFRAME.registerComponent('studio-env',{
+      init:function(){ const setup=()=>{ const r=this.el.renderer; if(!r||this.el.object3D.environment) return;
+        const cv=document.createElement('canvas'); cv.width=16; cv.height=128;
+        const g=cv.getContext('2d'), grad=g.createLinearGradient(0,0,0,128);
+        grad.addColorStop(0,'#ffffff'); grad.addColorStop(0.5,'#e2e6f7'); grad.addColorStop(1,'#9aa0c8');
+        g.fillStyle=grad; g.fillRect(0,0,16,128);
+        const tex=new THREE.CanvasTexture(cv); tex.mapping=THREE.EquirectangularReflectionMapping;
+        const pmrem=new THREE.PMREMGenerator(r); this.el.object3D.environment=pmrem.fromEquirectangular(tex).texture;
+        tex.dispose(); pmrem.dispose(); };
+        this.el.renderer?setup():this.el.addEventListener('loaded',setup,{once:true}); }
+    });
+
+    // ================= 반짝이 입자 (카드에서 위로 피어오름) =================
+    function radialTex(stops){
+      const c=document.createElement('canvas'); c.width=c.height=128; const g=c.getContext('2d');
+      const gr=g.createRadialGradient(64,64,0,64,64,64); stops.forEach(s=>gr.addColorStop(s[0],s[1]));
+      g.fillStyle=gr; g.fillRect(0,0,128,128);
+      const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t; }
+    AFRAME.registerComponent('sparkles',{
+      schema:{ n:{default:80}, w:{default:0.9}, h:{default:1.6}, color:{type:'color',default:'#fff2cf'}, psize:{default:110} },
+      init:function(){ const N=this.data.n, W=this.data.w, H=this.data.h;
+        this.pos=new Float32Array(N*3); this.ph=new Float32Array(N); this.sc=new Float32Array(N); this.sp=new Float32Array(N);
+        const rnd=(a,b)=>a+Math.random()*(b-a);
+        for(let i=0;i<N;i++){ this.pos[i*3]=rnd(-W,W); this.pos[i*3+1]=rnd(-W*0.55,W*0.55); this.pos[i*3+2]=rnd(0,H*1.3);
+          this.ph[i]=rnd(0,6.28); this.sc[i]=rnd(0.5,1.5); this.sp[i]=rnd(0.05,0.16); }
+        const geo=new THREE.BufferGeometry();
+        geo.setAttribute('position',new THREE.BufferAttribute(this.pos,3));
+        geo.setAttribute('ph',new THREE.BufferAttribute(this.ph,1));
+        geo.setAttribute('sc',new THREE.BufferAttribute(this.sc,1));
+        const col=new THREE.Color(this.data.color);
+        const tex=radialTex([[0,'rgba(255,255,255,1)'],[0.35,'rgba(255,250,235,0.75)'],[1,'rgba(255,240,210,0)']]);
+        const mat=new THREE.ShaderMaterial({ transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+          uniforms:{ t:{value:0}, map:{value:tex}, color:{value:new THREE.Vector3(col.r,col.g,col.b)}, psize:{value:this.data.psize} },
+          vertexShader:['attribute float ph; attribute float sc; uniform float t; uniform float psize; varying float vtw;',
+            'void main(){ vtw=0.4+0.6*max(0.0,sin(t*1.7+ph)); vec4 mv=modelViewMatrix*vec4(position,1.0);',
+            '  gl_PointSize=psize*sc*(0.55+0.8*vtw)*(1.0/max(0.15,-mv.z)); gl_Position=projectionMatrix*mv; }'].join('\n'),
+          fragmentShader:['uniform sampler2D map; uniform vec3 color; varying float vtw;',
+            'void main(){ vec4 s=texture2D(map,gl_PointCoord); gl_FragColor=vec4(color,1.0)*s*vtw; }'].join('\n') });
+        this.H=H; this.geo=geo; this.points=new THREE.Points(geo,mat); this.el.setObject3D('sparkles',this.points); },
+      tick:function(_,dt){ if(!this.points) return; const d=Math.min(dt||16,50)/1000;
+        this.points.material.uniforms.t.value=performance.now()/1000;
+        for(let i=0;i<this.data.n;i++){ this.pos[i*3+2]+=this.sp[i]*d*3.0;
+          if(this.pos[i*3+2]>this.H*1.35){ this.pos[i*3+2]=0; this.pos[i*3]=(Math.random()*2-1)*this.data.w; } }
+        this.geo.attributes.position.needsUpdate=true; }
+    });
+
+    // ================= 미디어 로드 =================
+    const mediaBox=document.getElementById('media');
+    const gt=document.getElementById('gt'), gs=document.getElementById('gs');
+    let ready=false, vW=460, vH=720, Hm=1.565;
+    let tries=0; const MAX=40;
+    async function loadClip(){
+      try{
+        const r=await fetch('/api/clip?t='+token,{cache:'no-store'}); if(!r.ok) throw 0;
+        const j=await r.json();
+        const all=(j.items&&j.items.length)?j.items:[{url:j.url,kind:j.kind||'video'}];
+        const it=all.find(x=>x.kind==='video')||all.find(x=>x.kind==='chroma')||all[0];
+        mediaBox.innerHTML='<video id="v" muted playsinline loop crossorigin="anonymous"></video>';
+        document.getElementById('v').src=it.url;
+        ready=true; stopSpin();
+        gt.textContent='탭하여 시작'; gs.innerHTML='카메라·동작 권한 허용 후<br>카드에 비춰주세요';
+      }catch(e){ tries++; if(tries<MAX){ gt.textContent='영상 준비 중…'; setTimeout(loadClip,2500); }
+        else { stopSpin(); gt.textContent='영상을 찾지 못했어요'; gs.innerHTML='?t=번호 확인 ('+token+')'; } }
+    }
+    function stopSpin(){ document.getElementById('gspin').style.display='none'; document.getElementById('gicon').style.display='block'; }
+    loadClip();
+    function mediaReady(){ const m=document.getElementById('v'); const set=()=>{ Hm=+(W*vH/vW).toFixed(3); };
+      if(!m) return Promise.resolve();
+      if(m.videoWidth){ vW=m.videoWidth; vH=m.videoHeight; set(); return Promise.resolve(); }
+      return new Promise(r=>{ m.addEventListener('loadedmetadata',()=>{ vW=m.videoWidth||vW; vH=m.videoHeight||vH; set(); r(); },{once:true}); setTimeout(r,4000); }); }
+
+    // ================= 씬 : 반짝이 + [사진(뒤) → 프레임(앞) → 풍선] =================
+    function sceneHTML(){
+      const xrweb = NOSLAM ? 'xrweb="disableWorldTracking: true"' : 'xrweb';
+      const hw=W/2, hh=Hm/2, zBall=(GAP+0.06);
+      const bp=(x,y)=>`${(+x).toFixed(3)} ${(+y).toFixed(3)} ${zBall.toFixed(3)}`;
+      return `<a-scene xrextras-gesture-detector xrextras-loading xrextras-runtime-error xrextras-almost-there
+        renderer="colorManagement:true; toneMapping:ACESFilmic; exposure:1.05" studio-env ${xrweb}>
+        <a-assets><img id="frame" src="${FRAME}" crossorigin="anonymous"></a-assets>
+        <a-camera position="0 4 10"></a-camera>
+        <a-light type="ambient" intensity="0.85"></a-light>
+        <a-light type="directional" intensity="1.15" position="1.5 2 2.5"></a-light>
+        <a-light type="directional" intensity="0.5" position="-2 1 -1"></a-light>
+        <a-entity id="anchor" persist-any-target>
+          <a-entity id="sparks" sparkles="n:${PN}; psize:${PSIZE}; w:${(W*0.95).toFixed(2)}; h:${(Hm*1.15).toFixed(2)}; color:${SPARK}"></a-entity>
+          <a-entity id="stand">
+            <a-plane id="videoBack" material="src:#v; shader:flat; side:double" width="${W}" height="${Hm}" position="0 0 0"></a-plane>
+            <a-plane id="frameFront" material="src:#frame; shader:flat; transparent:true; side:double" width="${W}" height="${Hm}" position="0 0 ${GAP.toFixed(3)}"></a-plane>
+            <a-entity class="balloon" balloon="shape:z;      color:#7b6ef0; size:${(0.26*W).toFixed(3)}" position="${bp(hw+0.16*W, hh-0.12*W)}" float3d="phase:0"></a-entity>
+            <a-entity class="balloon" balloon="shape:tri;    color:#7b6ef0; size:${(0.26*W).toFixed(3)}" position="${bp(-(hw+0.16*W), hh+0.02*W)}" float3d="phase:700"></a-entity>
+            <a-entity class="balloon" balloon="shape:square; color:#7b6ef0; size:${(0.26*W).toFixed(3)}" position="${bp(hw+0.14*W, -(hh-0.20*W))}" float3d="phase:1500"></a-entity>
+            <a-entity class="balloon" balloon="shape:heart;  color:#ec4d9b; size:${(0.28*W).toFixed(3)}" position="${bp(-(hw+0.18*W), -(hh-0.28*W))}" float3d="phase:2300"></a-entity>
+          </a-entity>
+        </a-entity>
+      </a-scene>`;
+    }
+
+    function setOrient(o){
+      orient=o; const st=document.getElementById('stand'); if(st&&st.object3D){
+        if(o==='v'){ st.object3D.rotation.set(Math.PI/2,0,0); st.object3D.position.set(0,0,LIFT+Hm/2); } // 수직: 세워 띄움
+        else       { st.object3D.rotation.set(0,0,0);        st.object3D.position.set(0,0,LIFT); }        // 수평: 눕혀 띄움
+      }
+      document.getElementById('tVert').classList.toggle('on', o==='v');
+      document.getElementById('tHorz').classList.toggle('on', o==='h');
+    }
+    function applyDepth(){
+      const ff=document.getElementById('frameFront'); if(ff&&ff.object3D) ff.object3D.position.z=GAP;
+      document.querySelectorAll('.balloon').forEach(b=>{ if(b.object3D) b.object3D.position.z=GAP+0.06; });
+    }
+    function applySpark(){ const s=document.getElementById('sparks'); if(s&&s.object3D) s.object3D.visible=showSpark;
+      document.getElementById('tSpark').classList.toggle('on',showSpark); }
+
+    function onXrError(e){
+      if(!NOSLAM){ const u=new URL(location.href); u.searchParams.set('noslam','1'); location.replace(u); return; }
+      const box=document.getElementById('err'); box.style.display='block';
+      box.textContent='AR 엔진 오류 — 안드로이드: Chrome / 아이폰: Safari 로 열어주세요. '+JSON.stringify((e&&e.detail)||'');
+    }
+
+    // ================= 버튼 =================
+    document.getElementById('tVert').onclick=(e)=>{e.stopPropagation(); setOrient('v');};
+    document.getElementById('tHorz').onclick=(e)=>{e.stopPropagation(); setOrient('h');};
+    const depthEl=document.getElementById('depth'); depthEl.value=GAP;
+    depthEl.oninput=()=>{ GAP=+depthEl.value; applyDepth(); };
+    document.getElementById('tSpark').onclick=(e)=>{e.stopPropagation(); showSpark=!showSpark; applySpark();};
+    let soundOn=false; const tSnd=document.getElementById('tSnd');
+    tSnd.onclick=(e)=>{ e.stopPropagation(); const m=document.getElementById('v'); if(!m) return;
+      soundOn=!soundOn; m.muted=!soundOn; if(soundOn) m.play().catch(()=>{}); tSnd.textContent=soundOn?'🔊':'🔇'; };
+
+    // ================= 시작 =================
+    let started=false;
+    document.getElementById('gate').addEventListener('click', async ()=>{
+      if(started||IN_APP||!ready) return; started=true;
+      const m=document.getElementById('v');
+      try{ m.muted=false; await m.play(); soundOn=true; tSnd.textContent='🔊'; }
+      catch(e){ m.muted=true; m.play().catch(()=>{}); soundOn=false; }
+      try{ if(window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission==='function') await DeviceMotionEvent.requestPermission(); }catch(e){}
+      await mediaReady();
+      document.getElementById('gate').style.display='none';
+      document.body.insertAdjacentHTML('beforeend', sceneHTML());
+      document.querySelector('a-scene').addEventListener('xrerror', onXrError);
+      document.getElementById('bar').style.display='flex';
+      setTimeout(()=>{ setOrient(orient); applyDepth(); applySpark(); }, 300);
+    });
+  </script>
+</body>
+</html>

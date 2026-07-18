@@ -1,5 +1,6 @@
 {
   "rewrites": [
-    { "source": "/v/:token", "destination": "/8w/v.html" }
+    { "source": "/v/:token", "destination": "/8w/v.html" },
+    { "source": "/fx/:token", "destination": "/8w/fx2.html" }
   ]
 }
