@@ -61,7 +61,9 @@
   </div>
   <div id="err"></div>
 
-  <div id="media" style="display:none"></div>
+  <!-- Android Chrome은 display:none 비디오를 디코딩하지 않아 텍스처가 검게 남음.
+       화면 밖 2px로 '렌더는 되되 안 보이게' 유지해야 안드로이드에서도 프레임이 나옴. -->
+  <div id="media" style="position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:60;overflow:hidden"></div>
 
   <script>
     // ================= 옵션 =================
@@ -211,8 +213,9 @@
         const j=await r.json();
         const all=(j.items&&j.items.length)?j.items:[{url:j.url,kind:j.kind||'video'}];
         const it=all.find(x=>x.kind==='video')||all.find(x=>x.kind==='chroma')||all[0];
-        mediaBox.innerHTML='<video id="v" muted playsinline loop crossorigin="anonymous"></video>';
-        document.getElementById('v').src=it.url;
+        mediaBox.innerHTML='<video id="v" muted autoplay playsinline webkit-playsinline loop crossorigin="anonymous"></video>';
+        const vEl=document.getElementById('v'); vEl.src=it.url;
+        vEl.play().catch(()=>{});   // 안드로이드: 즉시 디코딩 시작(무음 autoplay 허용)
         ready=true; stopSpin();
         gt.textContent='탭하여 시작'; gs.innerHTML='카메라·동작 권한 허용 후<br>카드에 비춰주세요';
       }catch(e){ tries++; if(tries<MAX){ gt.textContent='영상 준비 중…'; setTimeout(loadClip,2500); }
