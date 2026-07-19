@@ -55,7 +55,7 @@
   <div id="bar">
     <button id="tVert">📐 수직</button>
     <button id="tHorz">▭ 수평</button>
-    <div class="pill"><label>깊이</label><input id="depth" type="range" min="0" max="0.9" step="0.01" value="0.45"></div>
+    <div class="pill"><label>깊이</label><input id="depth" type="range" min="0" max="0.9" step="0.01" value="0.28"></div>
     <button id="tSpark" class="on">🌟 반짝이</button>
     <button id="tSnd">🔇</button>
   </div>
@@ -69,9 +69,9 @@
     const token = (location.pathname.match(/\/(?:v|fx)\/([a-z0-9-]{3,24})/i) || [,''])[1].toLowerCase()
                 || q.get('t') || 'demo01';
     let W    = +(q.get('w') || 1.0);
-    let GAP  = +(q.get('depth') || 0.45);       // 프레임↔사진 깊이
+    let GAP  = +(q.get('depth') || 0.28);       // 프레임↔사진 깊이(기본 낮춤)
     let LIFT = +(q.get('lift') || 0.16);        // 카드와의 간격(띄우기)
-    let orient = (q.get('orient') === 'h') ? 'h' : 'v';   // v=수직 / h=수평
+    let orient = (q.get('orient') === 'v') ? 'v' : 'h';   // 기본 수평(h) / ?orient=v 로 수직
     let showSpark = q.get('spark') !== '0';
     const PN    = Math.min(160, +(q.get('pn') || 80));
     const PSIZE = +(q.get('psize') || 110);
