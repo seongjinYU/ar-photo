@@ -346,7 +346,8 @@
       const behindZ = -0.06;                        // '사진 뒤로 살짝' (사진 평면 z=0 뒤)
       const startY = (-(Hm/2)-0.3).toFixed(3);      // 풍선 등장 시작 높이(사진 아래)
       const FLOAT = +(q.get('float') || 0.22);      // 사진 유닛 띄우기 높이
-      const PORTALW = +(q.get('pw') || 1.7);        // 홀로 포탈 베이스 크기
+      const PORTALW = +(q.get('pw') || 1.4);        // 홀로 포탈 베이스 크기(살짝 축소)
+      const PX = (q.get('px')!=null) ? +q.get('px') : 0.015;   // 포탈 수평 보정(발광부가 살짝 좌측이라 중앙 정렬)
       const PY = (q.get('py')!=null) ? +q.get('py') : (-(Hm/2)+0.05);   // 포탈 y(사진 하단 근처)
       // preview=1: 8th Wall 카메라/마커 대신 순정 A-Frame 카메라(드래그 회전). 씬 내용·좌표는 완전히 동일.
       const sceneAttrs = PREVIEW
@@ -368,7 +369,7 @@
           <a-entity id="sparks" sparkles="n:${PN}; psize:${PSIZE}; w:${(W*0.95).toFixed(2)}; h:${(Hm*1.15).toFixed(2)}; color:${SPARK}"></a-entity>
           <a-entity id="stand">
             <!-- 홀로그램 포탈 베이스: 사진 하단(사진 뒤), billboard로 카메라 향함 -->
-            <a-entity id="portal" sprite-overlay="src:/8w/assets/fx/light-circle.png; blend:normal; billboard:true; w:${PORTALW}; h:${PORTALW}; opacity:0.95" position="0 ${PY.toFixed(3)} -0.08"></a-entity>
+            <a-entity id="portal" sprite-overlay="src:/8w/assets/fx/light-circle.png; blend:normal; billboard:true; w:${PORTALW}; h:${PORTALW}; opacity:0.95" position="${PX.toFixed(3)} ${PY.toFixed(3)} -0.08"></a-entity>
             <!-- 사진 유닛(사진+프레임+풍선)을 살짝 띄움 → 포탈 위에 떠 있게 -->
             <a-entity id="floater" position="0 ${FLOAT.toFixed(3)} 0">
             <a-plane id="videoBack" material="src:#v; shader:flat; side:double" width="${W}" height="${Hm}" position="0 0 0"></a-plane>
