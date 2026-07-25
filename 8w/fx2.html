@@ -129,6 +129,9 @@
     const BG = q.get('bg') || 'ffffff';                // 프리뷰 뒷배경 색 (기본 흰색)
     const SHOWFX = q.get('fx') !== '0';                 // fx-lab 이식 이펙트(버블+오빗링) 표시 (기본 on, ?fx=0 으로 끔)
     const INTRO = q.get('intro') !== '0';               // 등장 연출 시퀀스 (기본 on, ?intro=0 으로 즉시 표시)
+    const IA = +(q.get('ia') || 1200);                  // 연출: 합체 시간(ms)
+    const IR = +(q.get('ir') || 2700);                  // 연출: 회전 기상 시간(ms)
+    const IV = +(q.get('iv') || 1500);                  // 연출: 링·버블 등장 시간(ms)
 
     const UA = navigator.userAgent;
     const IN_APP = /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i.test(UA);
@@ -239,7 +242,7 @@
     });
     // 등장(아래에서 떠오름) + 부유. 'rise' 이벤트를 받으면 startY→제자리로 상승 후 부유.
     AFRAME.registerComponent('rise-float',{
-      schema:{ toY:{default:0}, startY:{default:-1.1}, dur:{default:1500}, delay:{default:0}, bob:{default:0.03}, bobMs:{default:2600}, phase:{default:0} },
+      schema:{ toY:{default:0}, startY:{default:-1.1}, dur:{default:2000}, delay:{default:0}, bob:{default:0.03}, bobMs:{default:2600}, phase:{default:0} },
       init:function(){ this.t0=null; this.el.object3D.position.y=this.data.startY; },   // 즉시 아래에서 대기
       tick:function(time){ const o=this.el.object3D, d=this.data;
         if(this.el.__busy) return;   // 디플레이트(바람빠짐) 중엔 balloon-poke가 위치 전담 → 양보
@@ -290,7 +293,7 @@
     // ===== 등장 연출 디렉터 =====
     // __introGo(마커 인식) 시: 눕힘 → 프레임+사진 좌우 슬라이드 합체 → 한바퀴 돌며 수직 기상(+포탈 확대·풍선 상승) → 링·버블 등장
     AFRAME.registerComponent('intro-director',{
-      schema:{ assemble:{default:750}, rise:{default:1500}, reveal:{default:900}, slideX:{default:0.9} },
+      schema:{ assemble:{default:1200}, rise:{default:2700}, reveal:{default:1500}, slideX:{default:0.9} },
       init:function(){ this.t0=null; this.ready=false; this.setDone=false; this.done=false; this.riseGo=false; },
       grab:function(){
         this.stand=document.getElementById('stand'); this.video=document.getElementById('videoBack');
@@ -484,7 +487,7 @@
         <a-light type="ambient" intensity="0.85"></a-light>
         <a-light type="directional" intensity="1.15" position="1.5 2 2.5"></a-light>
         <a-light type="directional" intensity="0.5" position="-2 1 -1"></a-light>
-        <a-entity id="anchor" ${anchorAttr} ${INTRO?'intro-director':''}>
+        <a-entity id="anchor" ${anchorAttr} ${INTRO ? ('intro-director="assemble:'+IA+'; rise:'+IR+'; reveal:'+IV+'"') : ''}>
           <a-entity id="sparks" sparkles="n:${PN}; psize:${PSIZE}; w:${(W*0.95).toFixed(2)}; h:${(Hm*1.15).toFixed(2)}; color:${SPARK}"></a-entity>
           <a-entity id="stand">
             <!-- 홀로그램 포탈 베이스: 사진 하단(사진 뒤), billboard로 카메라 향함 -->
