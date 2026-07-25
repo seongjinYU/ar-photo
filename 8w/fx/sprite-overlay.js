@@ -9,7 +9,8 @@ AFRAME.registerComponent('sprite-overlay', {
   schema: { src: { type: 'string' }, w: { default: 1 }, h: { default: 1 },
             crush: { default: 0 }, blend: { default: 'add' }, billboard: { default: false },
             opacity: { default: 1.0 }, pulse: { default: 0 }, pulseMs: { default: 2400 },
-            bob: { default: 0 }, bobMs: { default: 2600 }, phase: { default: 0 }, respawnMs: { default: 4000 } },
+            bob: { default: 0 }, bobMs: { default: 2600 }, phase: { default: 0 }, respawnMs: { default: 4000 },
+            spin: { default: 0 } },   // spin>0: 텍스처를 중심 기준으로 회전(rad/초) — 포탈 회전 연출
   init: function () {
     if (!this.data.src) { console.warn('[sprite-overlay] no src'); return; }
     this.y0 = this.el.object3D.position.y;
@@ -51,10 +52,12 @@ AFRAME.registerComponent('sprite-overlay', {
       transparent: true, depthWrite: false, opacity: this.data.opacity, toneMapped: false });
     this.mesh = new THREE.Mesh(this.geo, mat);
     this.el.setObject3D('sprite', this.mesh);
+    if (this.data.spin) this.tex.center.set(0.5, 0.5);   // 중심 기준 회전
     this.popT = null; this.popStart = false; this.spawnT = 'start';
   },
   tick: function (t) {
     if (!this.mesh) return;
+    if (this.data.spin) this.tex.rotation = this.data.spin * t * 0.001;   // 천천히 회전
     if (this.popStart) { this.popT = t; this.popStart = false; }
     if (this.spawnT === 'start') { this.spawnT = t; }
     if (this.data.billboard && this.el.sceneEl.camera)

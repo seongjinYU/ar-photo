@@ -305,6 +305,34 @@
         this.geo.attributes.position.needsUpdate=true; }
     });
 
+    // 포탈 스월: 보라색 반짝이가 타원(디스크 둘레)을 돌며 반짝 → 회전 연출
+    AFRAME.registerComponent('portal-swirl',{
+      schema:{ n:{default:22}, rx:{default:0.52}, ry:{default:0.17}, color:{type:'color',default:'#c58bff'}, speed:{default:0.5}, psize:{default:90} },
+      init:function(){ const N=this.data.n;
+        this.pos=new Float32Array(N*3); this.a0=new Float32Array(N); this.rr=new Float32Array(N); this.ph=new Float32Array(N); this.sc=new Float32Array(N);
+        const rnd=(a,b)=>a+Math.random()*(b-a);
+        for(let i=0;i<N;i++){ this.a0[i]=rnd(0,6.28); this.rr[i]=rnd(0.72,1.08); this.ph[i]=rnd(0,6.28); this.sc[i]=rnd(0.5,1.4); }
+        const geo=new THREE.BufferGeometry();
+        geo.setAttribute('position',new THREE.BufferAttribute(this.pos,3));
+        geo.setAttribute('ph',new THREE.BufferAttribute(this.ph,1));
+        geo.setAttribute('sc',new THREE.BufferAttribute(this.sc,1));
+        const col=new THREE.Color(this.data.color);
+        const tex=radialTex([[0,'rgba(255,255,255,1)'],[0.4,'rgba(215,170,255,0.8)'],[1,'rgba(175,105,255,0)']]);
+        const mat=new THREE.ShaderMaterial({ transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+          uniforms:{ t:{value:0}, map:{value:tex}, color:{value:new THREE.Vector3(col.r,col.g,col.b)}, psize:{value:this.data.psize} },
+          vertexShader:['attribute float ph; attribute float sc; uniform float t; uniform float psize; varying float vtw;',
+            'void main(){ vtw=0.35+0.65*max(0.0,sin(t*2.0+ph)); vec4 mv=modelViewMatrix*vec4(position,1.0);',
+            '  gl_PointSize=psize*sc*(0.5+0.9*vtw)*(1.0/max(0.15,-mv.z)); gl_Position=projectionMatrix*mv; }'].join('\n'),
+          fragmentShader:['uniform sampler2D map; uniform vec3 color; varying float vtw;',
+            'void main(){ vec4 s=texture2D(map,gl_PointCoord); gl_FragColor=vec4(color,1.0)*s*vtw; }'].join('\n') });
+        this.geo=geo; this.points=new THREE.Points(geo,mat); this.el.setObject3D('swirl',this.points); },
+      tick:function(time){ if(!this.points) return; const t=time*0.001, d=this.data;
+        this.points.material.uniforms.t.value=t;
+        for(let i=0;i<d.n;i++){ const a=this.a0[i]+t*d.speed, r=this.rr[i];
+          this.pos[i*3]=Math.cos(a)*d.rx*r; this.pos[i*3+1]=Math.sin(a)*d.ry*r; this.pos[i*3+2]=0.03*Math.sin(a*2.0); }
+        this.geo.attributes.position.needsUpdate=true; }
+    });
+
     // ================= 미디어 로드 =================
     const mediaBox=document.getElementById('media');
     const gt=document.getElementById('gt'), gs=document.getElementById('gs');
@@ -349,6 +377,7 @@
       const PORTALW = +(q.get('pw') || 1.4);        // 홀로 포탈 베이스 크기(살짝 축소)
       const PX = (q.get('px')!=null) ? +q.get('px') : 0.015;   // 포탈 수평 보정(발광부가 살짝 좌측이라 중앙 정렬)
       const PY = (q.get('py')!=null) ? +q.get('py') : (-(Hm/2)+0.05);   // 포탈 y(사진 하단 근처)
+      const PSPIN = +(q.get('pspin') || 0);         // 포탈 텍스처 회전(기본 끔 — 이미지가 기울어 보임). 회전 느낌은 portal-swirl가 담당
       // preview=1: 8th Wall 카메라/마커 대신 순정 A-Frame 카메라(드래그 회전). 씬 내용·좌표는 완전히 동일.
       const sceneAttrs = PREVIEW
         ? `renderer="colorManagement:true; toneMapping:ACESFilmic; exposure:1.05" studio-env background="color:#${BG}" vr-mode-ui="enabled:false"`
@@ -369,7 +398,9 @@
           <a-entity id="sparks" sparkles="n:${PN}; psize:${PSIZE}; w:${(W*0.95).toFixed(2)}; h:${(Hm*1.15).toFixed(2)}; color:${SPARK}"></a-entity>
           <a-entity id="stand">
             <!-- 홀로그램 포탈 베이스: 사진 하단(사진 뒤), billboard로 카메라 향함 -->
-            <a-entity id="portal" sprite-overlay="src:/8w/assets/fx/light-circle.png; blend:normal; billboard:true; w:${PORTALW}; h:${PORTALW}; opacity:0.95" position="${PX.toFixed(3)} ${PY.toFixed(3)} -0.08"></a-entity>
+            <a-entity id="portal" sprite-overlay="src:/8w/assets/fx/light-circle.png; blend:normal; billboard:true; w:${PORTALW}; h:${PORTALW}; opacity:0.95; spin:${PSPIN}" position="${PX.toFixed(3)} ${PY.toFixed(3)} -0.08"></a-entity>
+            <!-- 포탈 회전 연출: 보라색 반짝이가 디스크 둘레를 타원으로 돌며 반짝 -->
+            <a-entity portal-swirl="rx:${(PORTALW*0.36).toFixed(3)}; ry:${(PORTALW*0.12).toFixed(3)}; speed:0.55" position="${PX.toFixed(3)} ${(PY+0.02).toFixed(3)} -0.03"></a-entity>
             <!-- 사진 유닛(사진+프레임+풍선)을 살짝 띄움 → 포탈 위에 떠 있게 -->
             <a-entity id="floater" position="0 ${FLOAT.toFixed(3)} 0">
             <a-plane id="videoBack" material="src:#v; shader:flat; side:double" width="${W}" height="${Hm}" position="0 0 0"></a-plane>
