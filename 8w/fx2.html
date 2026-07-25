@@ -252,7 +252,7 @@
     });
     // 풍선 탭 반응: 한두 번은 '툭' 눌림(스퀴시), threshold 이상이면 '바람빠짐'(크게 한두바퀴 화면 안팎 돈 뒤 제자리)
     AFRAME.registerComponent('balloon-poke',{
-      schema:{ threshold:{default:3} },
+      schema:{ threshold:{default:3}, dur:{default:2600} },
       init:function(){ this.count=0; this.squishT0=null; this.deflT0=null;
         this.home=new THREE.Vector3(); this.baseRot=new THREE.Euler();
         this.el.addEventListener('poke',()=>this.onPoke()); },
@@ -264,7 +264,9 @@
           const rf=this.el.components['rise-float']; if(rf) this.home.y=rf.data.toY;   // bob 제외 안착 높이
           this.baseRot.copy(this.el.object3D.rotation);
           this.el.__busy=true; this._deflGo=true;
-        } else { this._squishGo=true; }                 // 툭 스퀴시
+          if(window.__playSfx) window.__playSfx('deflate',{gain:0.85, dur:this.data.dur/1000});  // 날아가는 소리 — 애니 길이에 맞춰 늘림
+        } else { this._squishGo=true;                    // 툭 스퀴시
+          if(window.__playSfx) window.__playSfx('bop',{gain:0.8}); }
       },
       tick:function(time){ const o=this.el.object3D;
         // 툭 스퀴시(스케일 눌림, 위치는 rise-float가 계속 담당)
@@ -274,7 +276,7 @@
           else { const k=Math.sin(e*Math.PI); o.scale.set(1+0.22*k,1-0.28*k,1+0.22*k); } }
         // 바람빠짐: 큰 나선(2바퀴)으로 화면 밖까지 나갔다 제자리 복귀 + 텀블 회전
         if(this._deflGo){ this.deflT0=time; this._deflGo=false; }
-        if(this.deflT0!==null){ const T=2600, e=(time-this.deflT0)/T;
+        if(this.deflT0!==null){ const T=this.data.dur, e=(time-this.deflT0)/T;
           if(e>=1){ o.position.copy(this.home); o.rotation.copy(this.baseRot); o.scale.set(1,1,1);
             this.deflT0=null; this.count=0; this.el.__busy=false; }
           else { const env=Math.sin(Math.PI*e), ang=e*Math.PI*2*2, A=1.0, Az=0.5;
@@ -497,24 +499,28 @@
       if(best){ if(best.type==='bubble'){ best.el.emit('pop'); playPop(); } else best.el.emit('poke'); }
     },{passive:true});
 
-    // ── 버블 터짐 효과음 (Web Audio, 겹침 재생 + 두 소리 랜덤) ──
-    let __actx=null; const __popBufs=[];
-    const POP_SFX=['/8w/assets/sfx/bubble-pop-1.mp3','/8w/assets/sfx/bubble-pop-2.mp3'];
-    function initPopSfx(){   // 사용자 제스처(게이트 탭)에서 호출 → AudioContext 생성·디코딩
+    // ── 효과음 (Web Audio, 겹침 재생) ──
+    let __actx=null; const __sfx={};
+    const SFX={ pop1:'/8w/assets/sfx/bubble-pop-1.mp3', pop2:'/8w/assets/sfx/bubble-pop-2.mp3',
+                bop:'/8w/assets/sfx/balloon-bop.mp3', deflate:'/8w/assets/sfx/balloon-deflate.mp3' };
+    function initSfx(){   // 사용자 제스처(게이트 탭)에서 호출 → AudioContext 생성·디코딩
       if(__actx) return;
       try{ __actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; }
-      POP_SFX.forEach((url,i)=>fetch(url).then(r=>r.arrayBuffer())
+      Object.keys(SFX).forEach(k=>fetch(SFX[k]).then(r=>r.arrayBuffer())
         .then(b=>new Promise((res,rej)=>__actx.decodeAudioData(b,res,rej)))
-        .then(buf=>{ __popBufs[i]=buf; }).catch(()=>{}));
+        .then(buf=>{ __sfx[k]=buf; }).catch(()=>{}));
     }
-    function playPop(){
-      if(!__actx) return;
-      if(__actx.state==='suspended') __actx.resume();
-      const bufs=__popBufs.filter(Boolean); if(!bufs.length) return;
-      const src=__actx.createBufferSource(); src.buffer=bufs[(Math.random()*bufs.length)|0];
-      const g=__actx.createGain(); g.gain.value=0.7;
+    // opt.dur 지정 시 재생시간을 그 길이(초)에 맞춤(playbackRate로 늘리기/줄이기)
+    function playSfx(name,opt){ opt=opt||{};
+      if(!__actx) return; if(__actx.state==='suspended') __actx.resume();
+      const buf=__sfx[name]; if(!buf) return;
+      const src=__actx.createBufferSource(); src.buffer=buf;
+      src.playbackRate.value = opt.dur ? (buf.duration/opt.dur) : (opt.rate||1);
+      const g=__actx.createGain(); g.gain.value=(opt.gain!=null?opt.gain:0.7);
       src.connect(g).connect(__actx.destination); src.start();
     }
+    function playPop(){ playSfx(Math.random()<0.5?'pop1':'pop2',{gain:0.7}); }   // 버블 터짐(랜덤)
+    window.__playSfx = playSfx;   // balloon-poke 컴포넌트에서 사용
 
     // 사진이 열릴 때 1회: 전역 플래그를 켜면 모든 풍선의 tick이 폴링해 동시에 등장 시작
     function triggerRise(){ window.__riseGo = true; }
@@ -553,7 +559,7 @@
     let started=false;
     async function startScene(){
       if(started||IN_APP||!ready) return; started=true;
-      initPopSfx();   // 사용자 제스처에서 오디오 컨텍스트 생성 + 효과음 프리로드
+      initSfx();   // 사용자 제스처에서 오디오 컨텍스트 생성 + 효과음 프리로드
       const m=document.getElementById('v');
       try{ m.muted=false; await m.play(); soundOn=true; tSnd.textContent='🔊'; }
       catch(e){ m.muted=true; m.play().catch(()=>{}); soundOn=false; }
