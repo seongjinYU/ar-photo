@@ -244,7 +244,7 @@
         if(this.deflT0!==null){ const T=2600, e=(time-this.deflT0)/T;
           if(e>=1){ o.position.copy(this.home); o.rotation.copy(this.baseRot); o.scale.set(1,1,1);
             this.deflT0=null; this.count=0; this.el.__busy=false; }
-          else { const env=Math.sin(Math.PI*e), ang=e*Math.PI*2*2, A=2.2, Az=1.2;
+          else { const env=Math.sin(Math.PI*e), ang=e*Math.PI*2*2, A=1.0, Az=0.5;
             o.position.set(this.home.x+A*env*Math.cos(ang), this.home.y+A*0.8*env*Math.sin(ang), this.home.z+Az*env*Math.sin(ang*0.5+0.4));
             o.rotation.set(this.baseRot.x+env*ang*0.5, this.baseRot.y+env*ang, this.baseRot.z+env*ang*0.7);
             const sk=1-0.15*env; o.scale.set(sk,sk,sk); } }
