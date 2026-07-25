@@ -268,7 +268,7 @@
           const rf=this.el.components['rise-float']; if(rf) this.home.y=rf.data.toY;   // bob 제외 안착 높이
           this.baseRot.copy(this.el.object3D.rotation);
           this.el.__busy=true; this._deflGo=true;
-          if(window.__playSfx) window.__playSfx('deflate',{gain:0.85, dur:this.data.dur/1000});  // 날아가는 소리 — 애니 길이에 맞춰 늘림
+          if(window.__playSfx) window.__playSfx('deflate',{gain:0.85, loopDur:this.data.dur/1000});  // 날아가는 소리 — 원음 반복으로 애니 길이 채움(음정 유지)
         } else { this._squishGo=true;                    // 툭 스퀴시
           if(window.__playSfx) window.__playSfx('bop',{gain:0.8}); }
       },
@@ -491,7 +491,7 @@
           <a-entity id="sparks" sparkles="n:${PN}; psize:${PSIZE}; w:${(W*0.95).toFixed(2)}; h:${(Hm*1.15).toFixed(2)}; color:${SPARK}"></a-entity>
           <a-entity id="stand">
             <!-- 홀로그램 포탈 베이스: 사진 하단(사진 뒤), billboard로 카메라 향함 -->
-            <a-entity id="portal" sprite-overlay="src:/8w/assets/fx/light-circle.png; blend:normal; billboard:true; w:${PORTALW}; h:${PORTALW}; opacity:0.95; spin:${PSPIN}" position="${PX.toFixed(3)} ${PY.toFixed(3)} -0.08"></a-entity>
+            <a-entity id="portal" sprite-overlay="src:/8w/assets/fx/light-circle.png; blend:normal; billboard:false; w:${PORTALW}; h:${PORTALW}; opacity:0.95; spin:${PSPIN}" position="${PX.toFixed(3)} ${PY.toFixed(3)} -0.08"></a-entity>
             <!-- 포탈 회전 연출: 보라색 반짝이가 디스크 둘레를 타원으로 돌며 반짝 -->
             <a-entity portal-swirl="rx:${(PORTALW*0.36).toFixed(3)}; ry:${(PORTALW*0.12).toFixed(3)}; speed:0.55" position="${PX.toFixed(3)} ${(PY+0.02).toFixed(3)} -0.03"></a-entity>
             <!-- 사진 유닛(사진+프레임+풍선)을 살짝 띄움 → 포탈 위에 떠 있게 -->
@@ -582,9 +582,19 @@
       if(!__actx) return; if(__actx.state==='suspended') __actx.resume();
       const buf=__sfx[name]; if(!buf) return;
       const src=__actx.createBufferSource(); src.buffer=buf;
-      src.playbackRate.value = opt.dur ? (buf.duration/opt.dur) : (opt.rate||1);
-      const g=__actx.createGain(); g.gain.value=(opt.gain!=null?opt.gain:0.7);
-      src.connect(g).connect(__actx.destination); src.start();
+      const g=__actx.createGain(); const gain=(opt.gain!=null?opt.gain:0.7); g.gain.value=gain;
+      src.connect(g).connect(__actx.destination);
+      if(opt.loopDur){   // 어택 1회 + 중간(sustain) 구간만 반복해 loopDur초로 늘림(음정 유지) + 끝 페이드아웃
+        src.loopStart=buf.duration*0.28; src.loopEnd=buf.duration*0.72; src.loop=true;
+        src.start();
+        const end=__actx.currentTime+opt.loopDur;
+        g.gain.setValueAtTime(gain, Math.max(__actx.currentTime, end-0.35));
+        g.gain.linearRampToValueAtTime(0.0001, end);
+        src.stop(end);
+      } else {
+        src.playbackRate.value = opt.dur ? (buf.duration/opt.dur) : (opt.rate||1);
+        src.start();
+      }
     }
     function playPop(){ playSfx(Math.random()<0.5?'pop1':'pop2',{gain:0.7}); }   // 버블 터짐(랜덤)
     window.__playSfx = playSfx;   // balloon-poke 컴포넌트에서 사용
