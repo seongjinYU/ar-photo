@@ -345,6 +345,9 @@
       const bpZ=(x,y,z)=>`${(+x).toFixed(3)} ${(+y).toFixed(3)} ${(+z).toFixed(3)}`;
       const behindZ = -0.06;                        // '사진 뒤로 살짝' (사진 평면 z=0 뒤)
       const startY = (-(Hm/2)-0.3).toFixed(3);      // 풍선 등장 시작 높이(사진 아래)
+      const FLOAT = +(q.get('float') || 0.22);      // 사진 유닛 띄우기 높이
+      const PORTALW = +(q.get('pw') || 1.7);        // 홀로 포탈 베이스 크기
+      const PY = (q.get('py')!=null) ? +q.get('py') : (-(Hm/2)+0.05);   // 포탈 y(사진 하단 근처)
       // preview=1: 8th Wall 카메라/마커 대신 순정 A-Frame 카메라(드래그 회전). 씬 내용·좌표는 완전히 동일.
       const sceneAttrs = PREVIEW
         ? `renderer="colorManagement:true; toneMapping:ACESFilmic; exposure:1.05" studio-env background="color:#${BG}" vr-mode-ui="enabled:false"`
@@ -364,6 +367,10 @@
         <a-entity id="anchor" ${anchorAttr}>
           <a-entity id="sparks" sparkles="n:${PN}; psize:${PSIZE}; w:${(W*0.95).toFixed(2)}; h:${(Hm*1.15).toFixed(2)}; color:${SPARK}"></a-entity>
           <a-entity id="stand">
+            <!-- 홀로그램 포탈 베이스: 사진 하단(사진 뒤), billboard로 카메라 향함 -->
+            <a-entity id="portal" sprite-overlay="src:/8w/assets/fx/light-circle.png; blend:normal; billboard:true; w:${PORTALW}; h:${PORTALW}; opacity:0.95" position="0 ${PY.toFixed(3)} -0.08"></a-entity>
+            <!-- 사진 유닛(사진+프레임+풍선)을 살짝 띄움 → 포탈 위에 떠 있게 -->
+            <a-entity id="floater" position="0 ${FLOAT.toFixed(3)} 0">
             <a-plane id="videoBack" material="src:#v; shader:flat; side:double" width="${W}" height="${Hm}" position="0 0 0"></a-plane>
             <a-plane id="frameFront" material="src:#frame; shader:flat; transparent:true; side:double" width="${W}" height="${Hm}" position="0 0 ${GAP.toFixed(3)}"></a-plane>
             <!-- loco GLB 4개. 왼위(1)·오른아래(4)=사진 앞(현 위치) / 오른위(2)·왼아래(3)=사진 뒤로 살짝. 전부 아래에서 등장 -->
@@ -371,6 +378,7 @@
             <a-entity class="balloon" balloon-poke gltf-model="url(/8w/assets/loco_2_balloon1.glb)" fit-size="size:${(BSIZE*W).toFixed(3)}; flipx:true" rotation="90 0 0" position="${bpZ(hw+0.16*W, hh-0.12*W, behindZ)}" rise-float="toY:${(hh-0.12*W).toFixed(3)};  startY:${startY}; delay:250; phase:700"></a-entity>
             <a-entity class="balloon" balloon-poke gltf-model="url(/8w/assets/loco_3_balloon1.glb)" fit-size="size:${(BSIZE*W).toFixed(3)}" rotation="90 0 0" position="${bpZ(-(hw+0.18*W), -(hh-0.28*W), behindZ)}" rise-float="toY:${(-(hh-0.28*W)).toFixed(3)}; startY:${startY}; delay:500; phase:1500"></a-entity>
             <a-entity class="balloon" balloon-poke gltf-model="url(/8w/assets/loco_4_balloon1.glb)" fit-size="size:${(BSIZE*W).toFixed(3)}" rotation="90 0 0" position="${bp(hw+0.14*W,  -(hh-0.20*W))}" rise-float="toY:${(-(hh-0.20*W)).toFixed(3)}; startY:${startY}; delay:750; phase:2300"></a-entity>
+            </a-entity><!-- /floater -->
             ${SHOWFX ? `
             <!-- fx-lab 이식: 홀로 버블 9개(크게, 넓게 흩뿌림, billboard로 카메라 향함) -->
             <a-entity class="bubble" sprite-overlay="src:/8w/assets/fx/bubble.png; blend:normal; billboard:true; w:0.44; h:0.66; bob:0.04;  bobMs:3400; phase:0;    opacity:0.95" position="-1.02 0.72 0.18"></a-entity>
