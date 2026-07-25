@@ -178,7 +178,7 @@
     // GLB 풍선: 로드 후 최대 변을 size에 맞춰 정규화 + 원점 중심으로 이동
     // (float3d는 바깥 object3D를, 이 정규화는 안쪽 mesh를 다루므로 서로 간섭 없음)
     AFRAME.registerComponent('fit-size',{
-      schema:{size:{default:0.26},flipx:{default:false}},
+      schema:{size:{default:0.26},flipx:{default:false},gloss:{default:0.05}},
       init:function(){ this.el.addEventListener('model-loaded',()=>{
         const m=this.el.getObject3D('mesh'); if(!m) return;
         const s=new THREE.Vector3(); new THREE.Box3().setFromObject(m).getSize(s);
@@ -189,6 +189,20 @@
         this.el.object3D.updateWorldMatrix(true,false);
         const c=new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3());
         this.el.object3D.worldToLocal(c); m.position.sub(c);
+        // 유광: 재질을 매끈하게(낮은 roughness) + 물리재질로 승격해 clearcoat(유광 코트) + studio-env 반사 강화
+        const G=this.data.gloss;
+        if(G>0) m.traverse(o=>{ if(o.isMesh&&o.material){
+          const arr=Array.isArray(o.material)?o.material:[o.material];
+          const up=arr.map(mt=>{
+            let mat=mt;
+            if(mt.isMeshStandardMaterial && !mt.isMeshPhysicalMaterial){ mat=new THREE.MeshPhysicalMaterial(); mat.copy(mt); }
+            if('roughness' in mat) mat.roughness=G;
+            if('envMapIntensity' in mat) mat.envMapIntensity=1.8;
+            if('clearcoat' in mat){ mat.clearcoat=1.0; mat.clearcoatRoughness=0.05; }
+            mat.needsUpdate=true; return mat;
+          });
+          o.material=Array.isArray(o.material)?up:up[0];
+        } });
       }); }
     });
     AFRAME.registerComponent('float3d',{
