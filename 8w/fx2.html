@@ -91,7 +91,7 @@
     let W    = +(q.get('w') || 1.0);
     let GAP  = +(q.get('depth') || 0.05);       // 프레임 깊이(고정 5) — 풍선은 GAP+0.05=10. 슬라이더 없앰
     let LIFT = +(q.get('lift') || 0.16);        // 카드와의 간격(띄우기)
-    let orient = (q.get('orient') === 'v') ? 'v' : 'h';   // 기본 수평(h) / ?orient=v 로 수직
+    let orient = (q.get('orient') === 'h') ? 'h' : 'v';   // 기본 수직(v) / ?orient=h 로 수평
     let showSpark = q.get('spark') !== '0';
     const PN    = Math.min(160, +(q.get('pn') || 80));
     const PSIZE = +(q.get('psize') || 45);
@@ -178,7 +178,7 @@
     // GLB 풍선: 로드 후 최대 변을 size에 맞춰 정규화 + 원점 중심으로 이동
     // (float3d는 바깥 object3D를, 이 정규화는 안쪽 mesh를 다루므로 서로 간섭 없음)
     AFRAME.registerComponent('fit-size',{
-      schema:{size:{default:0.26},flipx:{default:false},gloss:{default:0.05}},
+      schema:{size:{default:0.26},flipx:{default:false},gloss:{default:0.02}},
       init:function(){ this.el.addEventListener('model-loaded',()=>{
         const m=this.el.getObject3D('mesh'); if(!m) return;
         const s=new THREE.Vector3(); new THREE.Box3().setFromObject(m).getSize(s);
@@ -197,8 +197,8 @@
             let mat=mt;
             if(mt.isMeshStandardMaterial && !mt.isMeshPhysicalMaterial){ mat=new THREE.MeshPhysicalMaterial(); mat.copy(mt); }
             if('roughness' in mat) mat.roughness=G;
-            if('envMapIntensity' in mat) mat.envMapIntensity=1.8;
-            if('clearcoat' in mat){ mat.clearcoat=1.0; mat.clearcoatRoughness=0.05; }
+            if('envMapIntensity' in mat) mat.envMapIntensity=2.2;
+            if('clearcoat' in mat){ mat.clearcoat=1.0; mat.clearcoatRoughness=0.03; }
             mat.needsUpdate=true; return mat;
           });
           o.material=Array.isArray(o.material)?up:up[0];
@@ -480,7 +480,7 @@
       const sceneEl=document.querySelector('a-scene');
       if(!PREVIEW){ sceneEl.addEventListener('xrerror', onXrError); sceneEl.addEventListener('xrimagefound', triggerRise); }  // AR: 마커 인식 시 등장
       else driveRenderLoop(sceneEl);   // 프리뷰: XR8이 점유·정지시킨 렌더 루프를 우리가 직접 돌림(안 그러면 풍선이 상승 도중 멈춤)
-      document.getElementById('bar').style.display='flex';
+      if(PREVIEW) document.getElementById('bar').style.display='flex';   // AR에선 버튼 숨김 — 수직·반짝이·소리 기본 고정
       setTimeout(()=>{ setOrient(orient); applyDepth(); applySpark(); applyScale(); if(PREVIEW) setTimeout(triggerRise, 250); }, 300);  // 프리뷰: 로드 후 등장
     }
     document.getElementById('gate').addEventListener('click', startScene);
