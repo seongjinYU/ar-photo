@@ -128,6 +128,7 @@
     let userScale = +(q.get('scale') || 1);            // 사진 크기(핀치/휠로 조절)
     const BG = q.get('bg') || 'ffffff';                // 프리뷰 뒷배경 색 (기본 흰색)
     const SHOWFX = q.get('fx') !== '0';                 // fx-lab 이식 이펙트(버블+오빗링) 표시 (기본 on, ?fx=0 으로 끔)
+    const INTRO = q.get('intro') !== '0';               // 등장 연출 시퀀스 (기본 on, ?intro=0 으로 즉시 표시)
 
     const UA = navigator.userAgent;
     const IN_APP = /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i.test(UA);
@@ -285,6 +286,69 @@
             const sk=1-0.15*env; o.scale.set(sk,sk,sk); } }
       }
     });
+
+    // ===== 등장 연출 디렉터 =====
+    // __introGo(마커 인식) 시: 눕힘 → 프레임+사진 좌우 슬라이드 합체 → 한바퀴 돌며 수직 기상(+포탈 확대·풍선 상승) → 링·버블 등장
+    AFRAME.registerComponent('intro-director',{
+      schema:{ assemble:{default:750}, rise:{default:1500}, reveal:{default:900}, slideX:{default:0.9} },
+      init:function(){ this.t0=null; this.ready=false; this.setDone=false; this.done=false; this.riseGo=false; },
+      grab:function(){
+        this.stand=document.getElementById('stand'); this.video=document.getElementById('videoBack');
+        this.frame=document.getElementById('frameFront'); this.portal=document.getElementById('portal');
+        this.swirl=document.querySelector('[portal-swirl]'); this.ring=document.getElementById('fx-ring');
+        this.sparks=document.getElementById('sparks'); this.bubbles=[...document.querySelectorAll('.bubble')];
+        this.ready=!!(this.stand&&this.stand.object3D && this.video&&this.video.getObject3D('mesh') && this.frame&&this.frame.getObject3D('mesh'));
+        return this.ready;
+      },
+      op:function(el,o){ if(!el) return; const m=el.getObject3D('mesh'); if(m&&m.material){ m.material.transparent=true; m.material.opacity=o; } },
+      setInitial:function(){
+        this.stand.object3D.rotation.set(0,0,0); this.stand.object3D.position.set(0,0,LIFT);   // 눕힘(수평)
+        this.video.object3D.position.x=-this.data.slideX; this.frame.object3D.position.x=this.data.slideX;
+        this.op(this.video,0); this.op(this.frame,0);
+        if(this.portal&&this.portal.object3D) this.portal.object3D.scale.setScalar(0.0001);
+        if(this.swirl&&this.swirl.object3D) this.swirl.object3D.visible=false;
+        if(this.ring&&this.ring.object3D) this.ring.object3D.scale.setScalar(0.0001);
+        if(this.sparks&&this.sparks.object3D) this.sparks.object3D.visible=false;
+        this.bubbles.forEach(b=>{ if(b.object3D) b.object3D.scale.setScalar(0.0001); });
+        this.setDone=true;
+      },
+      tick:function(time){
+        if(this.done) return;
+        if(!this.ready){ if(!this.grab()) return; }
+        if(!this.setDone) this.setInitial();
+        if(this.t0===null){ if(window.__introGo){ this.t0=time; } else return; }
+        const t=time-this.t0, D=this.data, cl=x=>Math.max(0,Math.min(1,x)), ease=x=>1-Math.pow(1-cl(x),3);
+        // P1 합체: 좌우 슬라이드 + 페이드인 (수평 상태)
+        { const e=ease(t/D.assemble);
+          this.video.object3D.position.x=-D.slideX*(1-e); this.frame.object3D.position.x=D.slideX*(1-e);
+          this.op(this.video, cl(t/D.assemble)); this.op(this.frame, cl(t/D.assemble)); }
+        // P2 한바퀴 돌며 수직 기상 (+포탈 확대, +반짝이, +풍선 상승)
+        const t2=t-D.assemble;
+        if(t2>0){ const e=ease(t2/D.rise);
+          this.stand.object3D.rotation.set((Math.PI/2)*e, (Math.PI*2)*e, 0);
+          this.stand.object3D.position.set(0,0, LIFT+(Hm/2)*e);
+          const pe=ease((t2-D.rise*0.25)/(D.rise*0.75));
+          if(this.portal&&this.portal.object3D) this.portal.object3D.scale.setScalar(Math.max(0.0001,pe));
+          if(this.swirl&&this.swirl.object3D) this.swirl.object3D.visible=pe>0.05;
+          if(this.sparks&&this.sparks.object3D) this.sparks.object3D.visible=showSpark && t2>D.rise*0.2;
+          if(!this.riseGo && t2>D.rise*0.1){ window.__riseGo=true; this.riseGo=true; } }
+        // P3 링 + 버블 등장 (합체·기상 후)
+        const t3=t-D.assemble-D.rise;
+        if(t3>0){ if(this.ring&&this.ring.object3D) this.ring.object3D.scale.setScalar(Math.max(0.0001,ease(t3/D.reveal)));
+          this.bubbles.forEach((b,i)=>{ if(b.object3D) b.object3D.scale.setScalar(Math.max(0.0001,ease((t3-i*35)/D.reveal))); }); }
+        if(t>D.assemble+D.rise+D.reveal+150) this.finish();
+      },
+      finish:function(){ this.done=true;
+        this.stand.object3D.rotation.set(Math.PI/2,0,0); this.stand.object3D.position.set(0,0,LIFT+Hm/2);
+        this.video.object3D.position.x=0; this.op(this.video,1);
+        this.frame.object3D.position.x=0; this.op(this.frame,1);
+        if(this.portal&&this.portal.object3D) this.portal.object3D.scale.setScalar(1);
+        if(this.swirl&&this.swirl.object3D) this.swirl.object3D.visible=true;
+        if(this.ring&&this.ring.object3D) this.ring.object3D.scale.setScalar(1);
+        if(this.sparks&&this.sparks.object3D) this.sparks.object3D.visible=showSpark;
+        this.bubbles.forEach(b=>{ if(b.object3D) b.object3D.scale.setScalar(1); });
+      }
+    });
     AFRAME.registerComponent('studio-env',{
       init:function(){ const setup=()=>{ const r=this.el.renderer; if(!r||this.el.object3D.environment) return;
         const cv=document.createElement('canvas'); cv.width=16; cv.height=128;
@@ -420,7 +484,7 @@
         <a-light type="ambient" intensity="0.85"></a-light>
         <a-light type="directional" intensity="1.15" position="1.5 2 2.5"></a-light>
         <a-light type="directional" intensity="0.5" position="-2 1 -1"></a-light>
-        <a-entity id="anchor" ${anchorAttr}>
+        <a-entity id="anchor" ${anchorAttr} ${INTRO?'intro-director':''}>
           <a-entity id="sparks" sparkles="n:${PN}; psize:${PSIZE}; w:${(W*0.95).toFixed(2)}; h:${(Hm*1.15).toFixed(2)}; color:${SPARK}"></a-entity>
           <a-entity id="stand">
             <!-- 홀로그램 포탈 베이스: 사진 하단(사진 뒤), billboard로 카메라 향함 -->
@@ -523,7 +587,7 @@
     window.__playSfx = playSfx;   // balloon-poke 컴포넌트에서 사용
 
     // 사진이 열릴 때 1회: 전역 플래그를 켜면 모든 풍선의 tick이 폴링해 동시에 등장 시작
-    function triggerRise(){ window.__riseGo = true; }
+    function triggerRise(){ if(INTRO) window.__introGo = true; else window.__riseGo = true; }
 
     // ── 프리뷰 렌더 루프 직접 구동 ──
     // 프리뷰(카메라 없음)에선 8th Wall(XR8)이 renderer의 애니메이션 루프를 점유만 하고
@@ -571,7 +635,11 @@
       if(!PREVIEW){ sceneEl.addEventListener('xrerror', onXrError); sceneEl.addEventListener('xrimagefound', triggerRise); }  // AR: 마커 인식 시 등장
       else driveRenderLoop(sceneEl);   // 프리뷰: XR8이 점유·정지시킨 렌더 루프를 우리가 직접 돌림(안 그러면 풍선이 상승 도중 멈춤)
       if(PREVIEW) document.getElementById('bar').style.display='flex';   // AR에선 버튼 숨김 — 수직·반짝이·소리 기본 고정
-      setTimeout(()=>{ setOrient(orient); applyDepth(); applySpark(); applyScale(); if(PREVIEW) setTimeout(triggerRise, 250); }, 300);  // 프리뷰: 로드 후 등장
+      setTimeout(()=>{
+        if(INTRO){ applyDepth(); applyScale(); }                         // 방향·반짝이·풍선·이펙트는 디렉터가 순차 등장
+        else { setOrient(orient); applyDepth(); applySpark(); applyScale(); }
+        if(PREVIEW) setTimeout(triggerRise, INTRO?700:250);              // 프리뷰: 초기 상태 잠깐 보인 뒤 연출 시작
+      }, 300);
     }
     document.getElementById('gate').addEventListener('click', startScene);
   </script>
