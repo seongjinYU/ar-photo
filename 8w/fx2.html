@@ -188,6 +188,7 @@
       schema:{ toY:{default:0}, startY:{default:-1.1}, dur:{default:1500}, delay:{default:0}, bob:{default:0.03}, bobMs:{default:2600}, phase:{default:0} },
       init:function(){ this.t0=null; this.el.object3D.position.y=this.data.startY; },   // 즉시 아래에서 대기
       tick:function(time){ const o=this.el.object3D, d=this.data;
+        if(this.el.__busy) return;   // 디플레이트(바람빠짐) 중엔 balloon-poke가 위치 전담 → 양보
         // 이벤트 대신 전역 플래그를 tick에서 폴링 → 리스너 등록 타이밍 레이스 없음(모든 풍선 동일 프레임에 t0 설정)
         if(this.t0===null){ if(window.__riseGo){ this.t0=time; } else { o.position.y=d.startY; return; } }
         const e=time - this.t0 - d.delay;
@@ -195,6 +196,39 @@
         if(e<d.dur){ const k=1-Math.pow(1-e/d.dur,3);                 // easeOutCubic 상승
           o.position.y=d.startY + (d.toY-d.startY)*k; return; }       // 목표 y는 명시값(캡처 안 함)
         o.position.y=d.toY + d.bob*Math.sin(time/d.bobMs*Math.PI*2 + d.phase/1000*Math.PI*2); }  // 도착 후 부유
+    });
+    // 풍선 탭 반응: 한두 번은 '툭' 눌림(스퀴시), threshold 이상이면 '바람빠짐'(크게 한두바퀴 화면 안팎 돈 뒤 제자리)
+    AFRAME.registerComponent('balloon-poke',{
+      schema:{ threshold:{default:3} },
+      init:function(){ this.count=0; this.squishT0=null; this.deflT0=null;
+        this.home=new THREE.Vector3(); this.baseRot=new THREE.Euler();
+        this.el.addEventListener('poke',()=>this.onPoke()); },
+      onPoke:function(){
+        if(this.deflT0!==null) return;                 // 이미 바람빠짐 중이면 무시
+        this.count++;
+        if(this.count>=this.data.threshold){            // 바람빠짐 시작
+          this.home.copy(this.el.object3D.position);
+          const rf=this.el.components['rise-float']; if(rf) this.home.y=rf.data.toY;   // bob 제외 안착 높이
+          this.baseRot.copy(this.el.object3D.rotation);
+          this.el.__busy=true; this._deflGo=true;
+        } else { this._squishGo=true; }                 // 툭 스퀴시
+      },
+      tick:function(time){ const o=this.el.object3D;
+        // 툭 스퀴시(스케일 눌림, 위치는 rise-float가 계속 담당)
+        if(this._squishGo){ this.squishT0=time; this._squishGo=false; }
+        if(this.squishT0!==null){ const e=(time-this.squishT0)/280;
+          if(e>=1){ this.squishT0=null; o.scale.set(1,1,1); }
+          else { const k=Math.sin(e*Math.PI); o.scale.set(1+0.22*k,1-0.28*k,1+0.22*k); } }
+        // 바람빠짐: 큰 나선(2바퀴)으로 화면 밖까지 나갔다 제자리 복귀 + 텀블 회전
+        if(this._deflGo){ this.deflT0=time; this._deflGo=false; }
+        if(this.deflT0!==null){ const T=2600, e=(time-this.deflT0)/T;
+          if(e>=1){ o.position.copy(this.home); o.rotation.copy(this.baseRot); o.scale.set(1,1,1);
+            this.deflT0=null; this.count=0; this.el.__busy=false; }
+          else { const env=Math.sin(Math.PI*e), ang=e*Math.PI*2*2, A=2.2, Az=1.2;
+            o.position.set(this.home.x+A*env*Math.cos(ang), this.home.y+A*0.8*env*Math.sin(ang), this.home.z+Az*env*Math.sin(ang*0.5+0.4));
+            o.rotation.set(this.baseRot.x+env*ang*0.5, this.baseRot.y+env*ang, this.baseRot.z+env*ang*0.7);
+            const sk=1-0.15*env; o.scale.set(sk,sk,sk); } }
+      }
     });
     AFRAME.registerComponent('studio-env',{
       init:function(){ const setup=()=>{ const r=this.el.renderer; if(!r||this.el.object3D.environment) return;
@@ -304,10 +338,10 @@
             <a-plane id="videoBack" material="src:#v; shader:flat; side:double" width="${W}" height="${Hm}" position="0 0 0"></a-plane>
             <a-plane id="frameFront" material="src:#frame; shader:flat; transparent:true; side:double" width="${W}" height="${Hm}" position="0 0 ${GAP.toFixed(3)}"></a-plane>
             <!-- loco GLB 4개. 왼위(1)·오른아래(4)=사진 앞(현 위치) / 오른위(2)·왼아래(3)=사진 뒤로 살짝. 전부 아래에서 등장 -->
-            <a-entity class="balloon" gltf-model="url(/8w/assets/loco_1_balloon1.glb)" fit-size="size:${(BSIZE*W).toFixed(3)}" rotation="90 0 0" position="${bp(-(hw+0.16*W), hh+0.02*W)}" rise-float="toY:${(hh+0.02*W).toFixed(3)};  startY:${startY}; delay:0;   phase:0"></a-entity>
-            <a-entity class="balloon" gltf-model="url(/8w/assets/loco_2_balloon1.glb)" fit-size="size:${(BSIZE*W).toFixed(3)}; flipx:true" rotation="90 0 0" position="${bpZ(hw+0.16*W, hh-0.12*W, behindZ)}" rise-float="toY:${(hh-0.12*W).toFixed(3)};  startY:${startY}; delay:250; phase:700"></a-entity>
-            <a-entity class="balloon" gltf-model="url(/8w/assets/loco_3_balloon1.glb)" fit-size="size:${(BSIZE*W).toFixed(3)}" rotation="90 0 0" position="${bpZ(-(hw+0.18*W), -(hh-0.28*W), behindZ)}" rise-float="toY:${(-(hh-0.28*W)).toFixed(3)}; startY:${startY}; delay:500; phase:1500"></a-entity>
-            <a-entity class="balloon" gltf-model="url(/8w/assets/loco_4_balloon1.glb)" fit-size="size:${(BSIZE*W).toFixed(3)}" rotation="90 0 0" position="${bp(hw+0.14*W,  -(hh-0.20*W))}" rise-float="toY:${(-(hh-0.20*W)).toFixed(3)}; startY:${startY}; delay:750; phase:2300"></a-entity>
+            <a-entity class="balloon" balloon-poke gltf-model="url(/8w/assets/loco_1_balloon1.glb)" fit-size="size:${(BSIZE*W).toFixed(3)}" rotation="90 0 0" position="${bp(-(hw+0.16*W), hh+0.02*W)}" rise-float="toY:${(hh+0.02*W).toFixed(3)};  startY:${startY}; delay:0;   phase:0"></a-entity>
+            <a-entity class="balloon" balloon-poke gltf-model="url(/8w/assets/loco_2_balloon1.glb)" fit-size="size:${(BSIZE*W).toFixed(3)}; flipx:true" rotation="90 0 0" position="${bpZ(hw+0.16*W, hh-0.12*W, behindZ)}" rise-float="toY:${(hh-0.12*W).toFixed(3)};  startY:${startY}; delay:250; phase:700"></a-entity>
+            <a-entity class="balloon" balloon-poke gltf-model="url(/8w/assets/loco_3_balloon1.glb)" fit-size="size:${(BSIZE*W).toFixed(3)}" rotation="90 0 0" position="${bpZ(-(hw+0.18*W), -(hh-0.28*W), behindZ)}" rise-float="toY:${(-(hh-0.28*W)).toFixed(3)}; startY:${startY}; delay:500; phase:1500"></a-entity>
+            <a-entity class="balloon" balloon-poke gltf-model="url(/8w/assets/loco_4_balloon1.glb)" fit-size="size:${(BSIZE*W).toFixed(3)}" rotation="90 0 0" position="${bp(hw+0.14*W,  -(hh-0.20*W))}" rise-float="toY:${(-(hh-0.20*W)).toFixed(3)}; startY:${startY}; delay:750; phase:2300"></a-entity>
             ${SHOWFX ? `
             <!-- fx-lab 이식: 홀로 버블 5개(카드 둘레 부유, billboard로 카메라 향함) -->
             <a-entity class="bubble" sprite-overlay="src:/8w/assets/fx/bubble.png; blend:normal; billboard:true; w:0.28; h:0.42; bob:0.035; bobMs:3400; phase:0;    opacity:0.95" position="-0.75 0.55 0.18"></a-entity>
@@ -346,6 +380,25 @@
     window.addEventListener('touchmove',(e)=>{ if(e.touches.length===2 && pinchD){ userScale=clampScale(pinchBase*dist2(e.touches)/pinchD); applyScale(); e.preventDefault(); } },{passive:false});
     window.addEventListener('touchend',(e)=>{ if(e.touches.length<2) pinchD=null; });
     window.addEventListener('wheel',(e)=>{ userScale=clampScale(userScale*(e.deltaY<0?1.06:0.94)); applyScale(); },{passive:true});
+
+    // ===== 탭 상호작용: 버블 터뜨리기 / 풍선 툭툭·바람빠짐 =====
+    const _ray=new THREE.Raycaster(), _ndc=new THREE.Vector2();
+    let _tapX=0,_tapY=0,_tapT=0,_tapOK=false;
+    const _canvas=()=>{ const s=document.querySelector('a-scene'); return s&&s.canvas; };
+    window.addEventListener('pointerdown',(e)=>{ if(e.isPrimary===false) return;
+      _tapX=e.clientX; _tapY=e.clientY; _tapT=performance.now(); _tapOK=(e.target===_canvas()); },{passive:true});
+    window.addEventListener('pointerup',(e)=>{ if(!_tapOK) return; _tapOK=false;
+      if(Math.hypot(e.clientX-_tapX,e.clientY-_tapY)>12 || performance.now()-_tapT>350) return;  // 드래그/롱프레스 제외
+      const scene=document.querySelector('a-scene'), cam=scene&&scene.camera, cv=scene&&scene.canvas; if(!cam||!cv) return;
+      const r=cv.getBoundingClientRect();
+      _ndc.x=((e.clientX-r.left)/r.width)*2-1; _ndc.y=-((e.clientY-r.top)/r.height)*2+1;
+      _ray.setFromCamera(_ndc,cam);
+      let best=null;
+      const hit=(el,o,type)=>{ if(!o) return; const h=_ray.intersectObject(o,true); if(h.length && (!best||h[0].distance<best.d)) best={el,type,d:h[0].distance}; };
+      document.querySelectorAll('.bubble').forEach(b=>hit(b,b.getObject3D('sprite'),'bubble'));
+      document.querySelectorAll('.balloon').forEach(b=>hit(b,b.getObject3D('mesh'),'balloon'));
+      if(best) best.el.emit(best.type==='bubble'?'pop':'poke');
+    },{passive:true});
 
     // 사진이 열릴 때 1회: 전역 플래그를 켜면 모든 풍선의 tick이 폴링해 동시에 등장 시작
     function triggerRise(){ window.__riseGo = true; }

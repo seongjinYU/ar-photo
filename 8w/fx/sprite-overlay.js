@@ -13,6 +13,9 @@ AFRAME.registerComponent('sprite-overlay', {
   init: function () {
     if (!this.data.src) { console.warn('[sprite-overlay] no src'); return; }
     this.y0 = this.el.object3D.position.y;
+    // 탭하면 터짐(pop): 'pop' 이벤트 받으면 tick에서 부풀며 페이드아웃 후 제거
+    this.popT = null;
+    this.el.addEventListener('pop', () => { if (this.mesh && this.popT === null) this.popStart = true; });
     const img = new Image(); img.crossOrigin = 'anonymous';
     img.onload = () => {
       let tex;
@@ -45,6 +48,17 @@ AFRAME.registerComponent('sprite-overlay', {
   },
   tick: function (t) {
     if (!this.mesh) return;
+    // 터짐 애니메이션: 살짝 부풀며 빠르게 페이드아웃 → 제거
+    if (this.popStart) { this.popT = t; this.popStart = false; }
+    if (this.popT !== null) {
+      if (this.data.billboard && this.el.sceneEl.camera)
+        this.mesh.quaternion.copy(this.el.sceneEl.camera.getWorldQuaternion(this._q || (this._q = new THREE.Quaternion())));
+      const e = (t - this.popT) / 200;
+      if (e >= 1) { this.el.removeObject3D('sprite'); this.mesh = null; return; }
+      const s = 1 + 0.7 * e; this.mesh.scale.set(s, s, 1);
+      this.mesh.material.opacity = this.data.opacity * (1 - e) * (1 - e);
+      return;
+    }
     const tt = t + this.data.phase;
     if (this.data.billboard && this.el.sceneEl.camera)
       this.mesh.quaternion.copy(this.el.sceneEl.camera.getWorldQuaternion(this._q || (this._q = new THREE.Quaternion())));
