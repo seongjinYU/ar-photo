@@ -221,11 +221,16 @@
     let firstVisit; try { firstVisit = !localStorage.getItem(SEEN_KEY); } catch(e){ firstVisit = true; }
     const SHOW_GUIDE = GUIDE_Q==='1' ? true : GUIDE_Q==='0' ? false : firstVisit;
     const coachEl = document.getElementById('coach');
-    function showCoach(){ coachEl.style.display='flex'; setTimeout(()=>{ coachEl.style.opacity='1'; }, 30);   // rAF 대신 timeout: 백그라운드 스로틀에도 안전
+    const GMIN = +(q.get('gmin') || 8000);   // 코치 최소 표시 시간(ms) ≈ 애니 한 루프. QR이 카드에 있어 마커가 즉시 잡혀도 가이드는 보여준다
+    let coachOpen=false, pendingRise=false, coachTimer=null;
+    function showCoach(){ coachOpen=true; coachEl.style.display='flex'; setTimeout(()=>{ coachEl.style.opacity='1'; }, 30);   // rAF 대신 timeout: 백그라운드 스로틀에도 안전
+      coachTimer=setTimeout(closeCoach, GMIN);                 // 한 루프 다 보면 자동 닫힘 (탭하면 그 전에도 닫힘)
       try{ localStorage.setItem(SEEN_KEY,'1'); }catch(e){} }   // '봤음'은 실제로 보여준 순간에만 기록
     function hideCoach(){ if(coachEl.style.display==='none'||!coachEl.style.display) return;
       coachEl.style.opacity='0'; setTimeout(()=>{ coachEl.style.display='none'; }, 400); }
-    coachEl.addEventListener('click', hideCoach);
+    function closeCoach(){ clearTimeout(coachTimer); hideCoach(); if(!coachOpen) return; coachOpen=false;
+      if(pendingRise){ pendingRise=false; triggerRise(); } }   // 코치 중 이미 마커를 찾았으면 닫히는 순간 연출 시작
+    coachEl.addEventListener('click', closeCoach);
 
     // ================= 마커(카드) 타깃 =================
     const imageTargetData = [
@@ -689,7 +694,8 @@
     window.__playSfx = playSfx;   // balloon-poke 컴포넌트에서 사용
 
     // 사진이 열릴 때 1회: 전역 플래그를 켜면 모든 풍선의 tick이 폴링해 동시에 등장 시작
-    function triggerRise(){ hideCoach(); if(INTRO) window.__introGo = true; else window.__riseGo = true; }   // 마커 인식 → 코치 닫고 연출 시작
+    function triggerRise(){ if(coachOpen){ pendingRise=true; return; }   // 코치 표시 중엔 보류 — 닫힐 때 시작(가이드가 즉시 사라지는 문제 방지)
+      hideCoach(); if(INTRO) window.__introGo = true; else window.__riseGo = true; }
 
     // ── 프리뷰 렌더 루프 직접 구동 ──
     // 프리뷰(카메라 없음)에선 8th Wall(XR8)이 renderer의 애니메이션 루프를 점유만 하고
