@@ -217,15 +217,15 @@
     // 최초 접속 코치: 카메라 켜진 뒤 어두운 오버레이+중앙 안내 (?guide=1 강제 / ?guide=0 스킵)
     // 탭하거나 카드 마커가 인식되면(triggerRise) 사라짐.
     const GUIDE_Q = q.get('guide');
-    const SEEN_KEY = 'sr_guide_seen2';   // v2: 코치 오버레이 개편 — 키 버전업으로 전원 1회 재노출
+    const SEEN_KEY = 'sr_guide_seen3';   // v3: 마커 보류 로직 완성판 — 깨진 플래시로 플래그만 소모된 폰도 재노출
     let firstVisit; try { firstVisit = !localStorage.getItem(SEEN_KEY); } catch(e){ firstVisit = true; }
-    const SHOW_GUIDE = GUIDE_Q==='1' ? true : GUIDE_Q==='0' ? false : firstVisit;
+    const SHOW_GUIDE = GUIDE_Q==='1' ? true : GUIDE_Q==='0' ? false : (PREVIEW ? true : firstVisit);   // 프리뷰는 항상 표시(개발 확인용)
     const coachEl = document.getElementById('coach');
     const GMIN = +(q.get('gmin') || 8000);   // 코치 최소 표시 시간(ms) ≈ 애니 한 루프. QR이 카드에 있어 마커가 즉시 잡혀도 가이드는 보여준다
     let coachOpen=false, pendingRise=false, coachTimer=null;
     function showCoach(){ coachOpen=true; coachEl.style.display='flex'; setTimeout(()=>{ coachEl.style.opacity='1'; }, 30);   // rAF 대신 timeout: 백그라운드 스로틀에도 안전
       coachTimer=setTimeout(closeCoach, GMIN);                 // 한 루프 다 보면 자동 닫힘 (탭하면 그 전에도 닫힘)
-      try{ localStorage.setItem(SEEN_KEY,'1'); }catch(e){} }   // '봤음'은 실제로 보여준 순간에만 기록
+      if(!PREVIEW) try{ localStorage.setItem(SEEN_KEY,'1'); }catch(e){} }   // '봤음'은 실제 AR에서 보여준 순간에만 기록
     function hideCoach(){ if(coachEl.style.display==='none'||!coachEl.style.display) return;
       coachEl.style.opacity='0'; setTimeout(()=>{ coachEl.style.display='none'; }, 400); }
     function closeCoach(){ clearTimeout(coachTimer); hideCoach(); if(!coachOpen) return; coachOpen=false;
@@ -542,7 +542,9 @@
         const all=(j.items&&j.items.length)?j.items:[{url:j.url,kind:j.kind||'video'}];
         const it=all.find(x=>x.kind==='video')||all.find(x=>x.kind==='chroma')||all[0];
         useMedia(it.url);
-      }catch(e){ tries++; if(tries<MAX){ gt.textContent='영상 준비 중…'; setTimeout(loadClip,2500); }
+      }catch(e){
+        if(PREVIEW){ useMedia('/8w/assets/sample.mp4'); return; }   // 로컬 프리뷰: /api/clip 없으면 샘플 영상으로
+        tries++; if(tries<MAX){ gt.textContent='영상 준비 중…'; setTimeout(loadClip,2500); }
         else { stopSpin(); gt.textContent='영상을 찾지 못했어요'; gs.innerHTML='?t=번호 확인 ('+token+')'; } }
     }
     function stopSpin(){ document.getElementById('gspin').style.display='none'; }
@@ -738,7 +740,7 @@
       try{ if(window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission==='function') await DeviceMotionEvent.requestPermission(); }catch(e){}
       await mediaReady();
       document.getElementById('gate').style.display='none';
-      if(SHOW_GUIDE && !PREVIEW) showCoach();   // 최초 접속: 카메라 위에 코치 오버레이 (프리뷰는 즉시 연출이라 생략)
+      if(SHOW_GUIDE) showCoach();   // 최초 접속(프리뷰는 항상): 카메라 위에 코치 오버레이 — 마커/연출은 닫힐 때까지 보류
       document.body.insertAdjacentHTML('beforeend', sceneHTML());
       const sceneEl=document.querySelector('a-scene');
       if(!PREVIEW){ sceneEl.addEventListener('xrerror', onXrError); sceneEl.addEventListener('xrimagefound', triggerRise); }  // AR: 마커 인식 시 등장
