@@ -217,10 +217,12 @@
     // 최초 접속 코치: 카메라 켜진 뒤 어두운 오버레이+중앙 안내 (?guide=1 강제 / ?guide=0 스킵)
     // 탭하거나 카드 마커가 인식되면(triggerRise) 사라짐.
     const GUIDE_Q = q.get('guide');
-    let firstVisit; try { firstVisit = !localStorage.getItem('sr_guide_seen'); } catch(e){ firstVisit = true; }
+    const SEEN_KEY = 'sr_guide_seen2';   // v2: 코치 오버레이 개편 — 키 버전업으로 전원 1회 재노출
+    let firstVisit; try { firstVisit = !localStorage.getItem(SEEN_KEY); } catch(e){ firstVisit = true; }
     const SHOW_GUIDE = GUIDE_Q==='1' ? true : GUIDE_Q==='0' ? false : firstVisit;
     const coachEl = document.getElementById('coach');
-    function showCoach(){ coachEl.style.display='flex'; setTimeout(()=>{ coachEl.style.opacity='1'; }, 30); }   // rAF 대신 timeout: 백그라운드 스로틀에도 안전
+    function showCoach(){ coachEl.style.display='flex'; setTimeout(()=>{ coachEl.style.opacity='1'; }, 30);   // rAF 대신 timeout: 백그라운드 스로틀에도 안전
+      try{ localStorage.setItem(SEEN_KEY,'1'); }catch(e){} }   // '봤음'은 실제로 보여준 순간에만 기록
     function hideCoach(){ if(coachEl.style.display==='none'||!coachEl.style.display) return;
       coachEl.style.opacity='0'; setTimeout(()=>{ coachEl.style.display='none'; }, 400); }
     coachEl.addEventListener('click', hideCoach);
@@ -723,7 +725,6 @@
     let started=false;
     async function startScene(){
       if(started||IN_APP||!ready) return; started=true;
-      try{ localStorage.setItem('sr_guide_seen','1'); }catch(e){}   // 가이드 봤음 — 다음 접속부터 텍스트 가이드
       initSfx();   // 사용자 제스처에서 오디오 컨텍스트 생성 + 효과음 프리로드
       const m=document.getElementById('v');
       try{ m.muted=false; await m.play(); soundOn=true; tSnd.textContent='🔊'; }
