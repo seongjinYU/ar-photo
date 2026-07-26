@@ -50,23 +50,39 @@
     .guide .gstep { font-size:14.5px; font-weight:700; color:#26262e; line-height:1.95; }
     .guide .gstep b { display:inline-block; width:21px; height:21px; line-height:21px; text-align:center;
       background:#5b4ff5; color:#fff; border-radius:50%; font-size:11.5px; font-weight:800; margin-right:8px; }
-    /* 최초 접속 가이드 애니메이션 — 카드를 평평히 두면 사진이 수직으로 떠오른다 */
-    .guide-anim { position:absolute; left:50%; transform:translateX(-50%);
-      bottom:max(env(safe-area-inset-bottom),22px);
-      background:rgba(255,255,255,.92); border-radius:22px; padding:12px 24px 15px;
-      box-shadow:0 6px 24px rgba(80,60,140,.14); backdrop-filter:blur(6px);
-      display:none; flex-direction:column; align-items:center; gap:6px; }
-    .guide-anim .ga-svg { width:124px; height:96px; display:block; overflow:visible; }
-    .guide-anim .ga-cap { font-size:14px; font-weight:800; color:#5b4ff5; letter-spacing:.2px; }
-    .ga-photo { transform-box:fill-box; transform-origin:50% 100%;
-      animation:gaRise 2.6s ease-in-out infinite; }
-    @keyframes gaRise {
-      0%   { transform:translateY(16px) scaleY(.12); opacity:0; }
-      10%  { opacity:.15; }
-      40%  { transform:translateY(0) scaleY(1); opacity:1; }
-      75%  { transform:translateY(0) scaleY(1); opacity:1; }
-      90%  { transform:translateY(16px) scaleY(.12); opacity:0; }
-      100% { transform:translateY(16px) scaleY(.12); opacity:0; } }
+    /* 최초 접속 코치 오버레이 — 카메라 켜진 뒤 화면을 어둡게 하고 중앙에 크게 안내 */
+    #coach { position:fixed; inset:0; z-index:90; display:none; flex-direction:column;
+      align-items:center; justify-content:center; gap:20px; text-align:center; padding:32px;
+      background:rgba(15,13,26,.74); backdrop-filter:blur(2px);
+      opacity:0; transition:opacity .35s; cursor:pointer; }
+    #coach .ga-svg { width:250px; height:193px; display:block; overflow:visible; }
+    #coach .ga-sub { font-size:13.5px; font-weight:600; color:rgba(255,255,255,.65); }
+    /* 3단계 스텝 리스트 — 애니 진행에 맞춰 순서대로 하이라이트 */
+    #coach .gc-steps { display:flex; flex-direction:column; gap:10px; text-align:left; }
+    #coach .gcs { display:flex; align-items:center; gap:11px; font-size:16.5px; font-weight:800; color:#fff; opacity:.4; }
+    #coach .gcs b { flex:none; width:24px; height:24px; line-height:24px; text-align:center;
+      background:#f14fa4; color:#fff; border-radius:50%; font-size:13px; font-weight:800; }
+    #coach .gcs.s1 { animation:gcHi1 7.8s infinite; }
+    #coach .gcs.s2 { animation:gcHi2 7.8s infinite; }
+    #coach .gcs.s3 { animation:gcHi3 7.8s infinite; }
+    /* 일러스트 타임라인(7.8s 루프): ①카드 내려놓기 0~33% → ②폰 고정+스캔 33~66% → ③사진 등장 66~100% */
+    .gc-card, .gc-phone, .gc-scan, #coach .ga-photo { transform-box:fill-box; }
+    .gc-card  { animation:gcCard 7.8s ease-in-out infinite; }
+    .gc-phone { animation:gcPhone 7.8s ease-in-out infinite; }
+    .gc-scan  { animation:gcScan 7.8s ease-in-out infinite; }
+    #coach .ga-photo { transform-origin:50% 100%; animation:gcPhoto 7.8s ease-in-out infinite; }
+    @keyframes gcCard  { 0%{opacity:0; transform:translateY(-14px)} 7%{opacity:1; transform:translateY(0)}
+                         96%{opacity:1; transform:translateY(0)} 100%{opacity:0; transform:translateY(0)} }
+    @keyframes gcPhone { 0%,32%{opacity:0; transform:translateY(8px)} 39%{opacity:1; transform:translateY(0)}
+                         96%{opacity:1; transform:translateY(0)} 100%{opacity:0; transform:translateY(0)} }
+    @keyframes gcScan  { 0%,36%{opacity:0} 42%{opacity:1} 49%{opacity:.35} 56%{opacity:1} 62%{opacity:.45}
+                         68%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+    @keyframes gcPhoto { 0%,66%{opacity:0; transform:translateY(14px) scaleY(.12)}
+                         74%{opacity:1; transform:translateY(0) scaleY(1)}
+                         96%{opacity:1; transform:translateY(0) scaleY(1)} 100%{opacity:0} }
+    @keyframes gcHi1 { 0%{opacity:1} 30%{opacity:1} 36%{opacity:.4} 94%{opacity:.4} 100%{opacity:1} }
+    @keyframes gcHi2 { 0%,30%{opacity:.4} 36%{opacity:1} 62%{opacity:1} 68%{opacity:.4} 100%{opacity:.4} }
+    @keyframes gcHi3 { 0%,62%{opacity:.4} 68%{opacity:1} 96%{opacity:1} 100%{opacity:.4} }
     @keyframes sp { to { transform:rotate(360deg); } }
     #bar { position:fixed; left:0; right:0; bottom:max(env(safe-area-inset-bottom),14px);
       display:none; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; z-index:50; padding:0 12px; }
@@ -94,33 +110,55 @@
     <div class="spin" id="gspin"></div>
     <div class="t" id="gt">영상 찾는 중…</div>
     <div class="s" id="gs">잠시만요</div>
-    <div class="guide" id="guideText">
+    <div class="guide">
       <div class="gh">PLAY GUIDE</div>
       <div class="gstep"><b>1</b> 화면 아무곳이나 클릭</div>
       <div class="gstep"><b>2</b> 카메라·동작 권한 허용</div>
       <div class="gstep"><b>3</b> 카드를 비추면 사진이 재생</div>
     </div>
-    <!-- 최초 접속 전용: 카드→사진이 수직으로 떠오르는 미니 애니메이션 -->
-    <div class="guide-anim" id="guideAnim">
-      <svg class="ga-svg" viewBox="0 0 200 150" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="gaGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#f14fa4"/><stop offset="1" stop-color="#5b4ff5"/>
-          </linearGradient>
-        </defs>
-        <ellipse cx="100" cy="124" rx="52" ry="8" fill="rgba(91,79,245,.10)"/>
-        <!-- 평평히 놓인 카드(원근) -->
-        <polygon points="60,102 140,102 156,124 44,124" fill="#fffdf8" stroke="#e7ddf6" stroke-width="2"/>
-        <polygon points="77,106 123,106 132,120 68,120" fill="#f3ecff"/>
-        <!-- 수직으로 떠오르는 사진 -->
-        <g class="ga-photo">
-          <rect x="80" y="40" width="40" height="62" rx="6" fill="#ffffff" stroke="url(#gaGrad)" stroke-width="3"/>
-          <circle cx="100" cy="63" r="9" fill="#ffd9ec"/>
-          <path d="M84 90 q16 -19 32 0" fill="none" stroke="#cdbff7" stroke-width="3" stroke-linecap="round"/>
+  </div>
+
+  <!-- 최초 접속 코치 오버레이: 카메라 켜진 뒤 화면을 어둡게 하고 중앙에 크게 안내
+       (탭하거나 카드 마커가 인식되면 사라짐) -->
+  <div id="coach">
+    <svg class="ga-svg" viewBox="0 0 220 170" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="gaGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#f14fa4"/><stop offset="1" stop-color="#5b4ff5"/>
+        </linearGradient>
+      </defs>
+      <ellipse cx="110" cy="142" rx="58" ry="8" fill="rgba(255,255,255,.14)"/>
+      <!-- ① 평평한 곳에 내려놓는 카드(원근) -->
+      <g class="gc-card">
+        <polygon points="70,120 150,120 166,142 54,142" fill="#fffdf8" stroke="#e7ddf6" stroke-width="2"/>
+        <polygon points="87,124 133,124 142,138 78,138" fill="#f3ecff"/>
+      </g>
+      <!-- ② 카드를 향해 고정한 폰 + 스캔 콘/뷰파인더 -->
+      <g class="gc-phone">
+        <g transform="translate(152,12) rotate(16)">
+          <rect x="0" y="0" width="30" height="52" rx="7" fill="rgba(255,255,255,.10)" stroke="#fff" stroke-width="2.5"/>
+          <circle cx="15" cy="9" r="2.6" fill="#fff"/>
         </g>
-      </svg>
-      <div class="ga-cap">카드를 평평히 두고 비추면 사진이 나타나요</div>
+      </g>
+      <g class="gc-scan">
+        <path d="M138,64 L78,118" stroke="rgba(255,183,219,.75)" stroke-width="2" stroke-dasharray="4 5" fill="none"/>
+        <path d="M165,72 L148,118" stroke="rgba(255,183,219,.75)" stroke-width="2" stroke-dasharray="4 5" fill="none"/>
+        <path d="M48,124 v-8 h10 M172,124 v-8 h-10 M48,138 v8 h10 M172,138 v8 h-10"
+          stroke="#ffb7db" stroke-width="3" fill="none" stroke-linecap="round"/>
+      </g>
+      <!-- ③ 카드에서 수직으로 살아나는 사진 -->
+      <g class="ga-photo">
+        <rect x="90" y="52" width="40" height="62" rx="6" fill="#ffffff" stroke="url(#gaGrad)" stroke-width="3"/>
+        <circle cx="110" cy="75" r="9" fill="#ffd9ec"/>
+        <path d="M94 102 q16 -19 32 0" fill="none" stroke="#cdbff7" stroke-width="3" stroke-linecap="round"/>
+      </g>
+    </svg>
+    <div class="gc-steps">
+      <div class="gcs s1"><b>1</b> 카드를 평평한 곳에 놓기</div>
+      <div class="gcs s2"><b>2</b> 카메라를 카드에 고정하고 계속 비추기</div>
+      <div class="gcs s3"><b>3</b> 사진이 살아나 움직여요!</div>
     </div>
+    <div class="ga-sub">화면을 탭하면 안내가 닫혀요</div>
   </div>
 
   <div class="full" id="inapp" style="display:none">
@@ -176,13 +214,16 @@
     const NOSLAM = /[?&]noslam=1/.test(location.search);
     if (IN_APP) { document.getElementById('gate').style.display='none'; document.getElementById('inapp').style.display='flex'; }
 
-    // 최초 접속 안내: 첫 방문엔 카드→사진 애니를, 이후엔 텍스트 가이드를 표시 (?guide=1 강제 / ?guide=0 스킵)
+    // 최초 접속 코치: 카메라 켜진 뒤 어두운 오버레이+중앙 안내 (?guide=1 강제 / ?guide=0 스킵)
+    // 탭하거나 카드 마커가 인식되면(triggerRise) 사라짐.
     const GUIDE_Q = q.get('guide');
     let firstVisit; try { firstVisit = !localStorage.getItem('sr_guide_seen'); } catch(e){ firstVisit = true; }
     const SHOW_GUIDE = GUIDE_Q==='1' ? true : GUIDE_Q==='0' ? false : firstVisit;
-    (function(){ const ga=document.getElementById('guideAnim'), gx=document.getElementById('guideText');
-      if(SHOW_GUIDE){ if(ga) ga.style.display='flex'; if(gx) gx.style.display='none'; }
-      else { if(ga) ga.style.display='none'; if(gx) gx.style.display='block'; } })();
+    const coachEl = document.getElementById('coach');
+    function showCoach(){ coachEl.style.display='flex'; setTimeout(()=>{ coachEl.style.opacity='1'; }, 30); }   // rAF 대신 timeout: 백그라운드 스로틀에도 안전
+    function hideCoach(){ if(coachEl.style.display==='none'||!coachEl.style.display) return;
+      coachEl.style.opacity='0'; setTimeout(()=>{ coachEl.style.display='none'; }, 400); }
+    coachEl.addEventListener('click', hideCoach);
 
     // ================= 마커(카드) 타깃 =================
     const imageTargetData = [
@@ -646,7 +687,7 @@
     window.__playSfx = playSfx;   // balloon-poke 컴포넌트에서 사용
 
     // 사진이 열릴 때 1회: 전역 플래그를 켜면 모든 풍선의 tick이 폴링해 동시에 등장 시작
-    function triggerRise(){ if(INTRO) window.__introGo = true; else window.__riseGo = true; }
+    function triggerRise(){ hideCoach(); if(INTRO) window.__introGo = true; else window.__riseGo = true; }   // 마커 인식 → 코치 닫고 연출 시작
 
     // ── 프리뷰 렌더 루프 직접 구동 ──
     // 프리뷰(카메라 없음)에선 8th Wall(XR8)이 renderer의 애니메이션 루프를 점유만 하고
@@ -690,6 +731,7 @@
       try{ if(window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission==='function') await DeviceMotionEvent.requestPermission(); }catch(e){}
       await mediaReady();
       document.getElementById('gate').style.display='none';
+      if(SHOW_GUIDE && !PREVIEW) showCoach();   // 최초 접속: 카메라 위에 코치 오버레이 (프리뷰는 즉시 연출이라 생략)
       document.body.insertAdjacentHTML('beforeend', sceneHTML());
       const sceneEl=document.querySelector('a-scene');
       if(!PREVIEW){ sceneEl.addEventListener('xrerror', onXrError); sceneEl.addEventListener('xrimagefound', triggerRise); }  // AR: 마커 인식 시 등장
